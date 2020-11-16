@@ -100,11 +100,22 @@ def main():
         
     with col3:
         if show_cylproj:
+            st.text("") # workaround for a streamlit layout bug
             h, w = cylproj.shape
-            st.image(np.flip(cylproj, axis=0), width=w, caption=f"Cylindrical Projection ({w}x{h})", 
-                clamp=(cylproj.min(), cylproj.max()))
+            tooltips = [("angle", "$x°"), ('axial', '$yÅ'), ('cylproj', '@image')]
+            fig = generate_bokeh_figure(cylproj, da, dz, title=f"Cylindrical Projection ({w}x{h})", title_location="below", 
+                    plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
+            fig.title.align = "center"
+            fig.title.text_font_size = "18px"
+            fig.title.text_font_style = "normal"
+            st.bokeh_chart(fig, use_container_width=True)
+
         if show_acf:
-            fig = generate_bokeh_figure(acf, da, dz, title=f"Auto-correlation function ({w}x{h})", title_location="below", plot_width=None, plot_height=None, show_axis=False, show_toolbar=False)
+            st.text("") # workaround for a streamlit layout bug
+            h, w = acf.shape
+            tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
+            fig = generate_bokeh_figure(acf, da, dz, title=f"Auto-correlation function ({w}x{h})", title_location="below", 
+                    plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
             fig.title.align = "center"
             fig.title.text_font_size = "18px"
             fig.title.text_font_style = "normal"
@@ -123,7 +134,12 @@ def main():
         h, w = acf.shape
         h2 = 900   # final plot height
         w2 = int(round(w * h2/h))//2*2
-        fig = generate_bokeh_figure(image=acf, dx=da, dy=dz, title="", title_location="above", plot_width=w2, plot_height=h2, show_axis=True, show_toolbar=True)
+        x_axis_label="twist (°)"
+        y_axis_label="reise (Å)"
+        tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
+        fig = generate_bokeh_figure(image=acf, dx=da, dy=dz, title="", title_location="above", 
+                plot_width=w2, plot_height=h2, x_axis_label=x_axis_label, y_axis_label=y_axis_label,
+                tooltips=tooltips, show_axis=True, show_toolbar=True)
 
         # horizontal line along the equator
         from bokeh.models import LinearColorMapper, Arrow, VeeHead, Line
@@ -156,15 +172,16 @@ def main():
 
     return
 
-def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, show_axis=True, show_toolbar=True):
+def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, 
+    x_axis_label='x', y_axis_label='y', tooltips=None, show_axis=True, show_toolbar=True):
     from bokeh.plotting import figure
-    w, h = image.shape
+    h, w = image.shape
     w2 = plot_width if plot_width else w
     h2 = plot_height if plot_height else h
     tools = 'box_zoom,crosshair,pan,reset,save,wheel_zoom'
     fig = figure(title_location=title_location, 
         frame_width=w2, frame_height=h2, 
-        x_axis_label="twist (°)", y_axis_label="reise (Å)",
+        x_axis_label=x_axis_label, y_axis_label=y_axis_label,
         x_range=(-w//2*dx, (w//2-1)*dx), y_range=(-h//2*dy, (h//2-1)*dy), 
         tools=tools)
     fig.grid.visible = False
@@ -181,7 +198,8 @@ def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_
 
     # add hover tool only for the image
     from bokeh.models.tools import HoverTool
-    tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
+    if not tooltips:
+        tooltips = [("x", "$x°"), ('y', '$yÅ'), ('val', '@image')]
     image_hover = HoverTool(renderers=[image], tooltips=tooltips)
     fig.add_tools(image_hover)
     return fig
