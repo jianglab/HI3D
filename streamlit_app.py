@@ -12,7 +12,7 @@ def main():
 
     with col1:
         with st.beta_expander(label="README", expanded=False):
-            st.write("This Web app considers a biological helical structure as a 2D crystal that has been rolled up into a cylindrical tube while preserving the original lattice. The indexing process is thus to computationally reverse this process: the 3D helical structure is first unrolled into a 2D image using cylindrical projection, and then the 2D lattice parameters are automatically identified from which the helical parameters (twist, rise, and cyclic symmetry) are derived. The auto-correlation function of the cylindrical projection is used to provide a lattice with sharper peaks. Two distinct lattice identification methods, one for generical 2D lattice and one specifically for helical lattice, are used to find a consistent solution.  \n  \nTips: play with the rmin/rmax, #peaks, axial step size parameters if consistent helical parameters cannot be obtained with the default parameters")
+            st.write("This Web app considers a biological helical structure as a 2D crystal that has been rolled up into a cylindrical tube while preserving the original lattice. The indexing process is thus to computationally reverse this process: the 3D helical structure is first unrolled into a 2D image using cylindrical projection, and then the 2D lattice parameters are automatically identified from which the helical parameters (twist, rise, and cyclic symmetry) are derived. The auto-correlation function of the cylindrical projection is used to provide a lattice with sharper peaks. Two distinct lattice identification methods, one for generical 2D lattice and one specifically for helical lattice, are used to find a consistent solution.  \n  \nTips: play with the rmin/rmax, #peaks, axial step size parameters if consistent helical parameters cannot be obtained with the default parameters.  \n  \nTips: maximize the browser window or zoom-out the browser view (using ctrl- or ⌘- key combinations) if the displayed images overlap each other.")
         
         url = "ftp://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
         label = "Input the url of a 3D map or an EMDB ID (emd-XXXXX):"
@@ -39,7 +39,7 @@ def main():
             return
 
         nz, ny, nx = data.shape
-        st.write(f'Map size: {nx}x{ny}x{nz} &emsp;Pixel size: {apix:.4f} Å/pixel')
+        st.write(f'Map size: {nx}x{ny}x{nz} &emsp;Sampling: {apix:.4f} Å/voxel')
         # make radio display horizontal
         st.write('<style>div.Widget.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
         section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
@@ -80,46 +80,31 @@ def main():
         dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.1f")
         rmin = st.number_input('rmin (Å)', value=0.0, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1f")
         rmax = st.number_input('rmax (Å)', value=nx//2*apix, min_value=rmin+1.0, max_value=nx//2*apix, step=1.0, format="%.1f")
-        npeaks_input = st.empty()
-        st.subheader("Display:")
-        show_cylproj = st.checkbox(label="Cylindrcal projection", value=True)
-        show_acf = st.checkbox(label="Auto-correlation function", value=True)
-        show_peaks = st.checkbox(label="Peaks", value=True)
-        
-    with col3:
+
         data = auto_masking(data)
         data = minimal_grids(data)
         cylproj = cylindrical_projection(data, da=da, dz=dz/apix, dr=1, rmin=rmin/apix, rmax=rmax/apix, interpolation_order=1)
 
         cylproj_square = make_square_shape(cylproj)
         acf = auto_correlation(cylproj_square, high_pass_fraction=1./cylproj_square.shape[0])
+        
         peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, min_mass=0.5)
         npeaks_all = len(peaks)
-        npeaks = npeaks_input.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
+        npeaks = st.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
 
+        st.subheader("Display:")
+        show_cylproj = st.checkbox(label="Cylindrical projection", value=True)
+        show_acf = st.checkbox(label="Auto-correlation function", value=True)
+        if show_acf:
+            show_peaks = st.checkbox(label="Peaks", value=True)
+        
+    with col3:
         if show_cylproj:
             h, w = cylproj.shape
-            st.image(np.flip(cylproj, axis=0), width=w, caption=f"Cylindrical Projection ({w}x{h})", clamp=(cylproj.min(), cylproj.max()))
+            st.image(np.flip(cylproj, axis=0), width=w, caption=f"Cylindrical Projection ({w}x{h})", 
+                clamp=(cylproj.min(), cylproj.max()))
         if show_acf:
-            h, w = acf.shape
-            x = np.arange(-w//2, w//2)*da
-            y = np.arange(-h//2, h//2)*dz
-            tools = 'box_zoom,crosshair,pan,reset,save,wheel_zoom'
-            fig = figure(title=f"Auto-correlation function ({w}x{h})", title_location="below", 
-                frame_width=w, frame_height=h, 
-                x_axis_label="twist (°)", y_axis_label="reise (Å)", 
-                x_range=(-w//2*da, (w//2-1)*da), y_range=(-h//2*dz, (h//2-1)*dz), 
-                tools=tools)
-            fig.axis.visible = False
-            fig.grid.visible = False
-            from bokeh.models import LinearColorMapper
-            color_mapper = LinearColorMapper(palette='Greys256')    # Greys256, Viridis256
-            image = fig.image(image=[acf], 
-                x=-w//2*da, y=-h//2*dz, dw=w*da, dh=h*dz, 
-                color_mapper=color_mapper)
-            from bokeh.models.tools import HoverTool
-            image_hover = HoverTool(renderers=[image])
-            fig.add_tools(image_hover)
+            fig = generate_bokeh_figure(acf, da, dz, title=f"Auto-correlation function ({w}x{h})", title_location="below", plot_width=None, plot_height=None, show_axis=False, show_toolbar=False)
             fig.title.align = "center"
             fig.title.text_font_size = "18px"
             fig.title.text_font_style = "normal"
@@ -135,41 +120,28 @@ def main():
             st.bokeh_chart(fig, use_container_width=True)
 
     with col4:
+        h, w = acf.shape
+        h2 = 900   # final plot height
+        w2 = int(round(w * h2/h))//2*2
+        fig = generate_bokeh_figure(image=acf, dx=da, dy=dz, title="", title_location="above", plot_width=w2, plot_height=h2, show_axis=True, show_toolbar=True)
+
+        # horizontal line along the equator
+        from bokeh.models import LinearColorMapper, Arrow, VeeHead, Line
+        fig.line([-w//2*dz, (w//2-1)*dz], [0, 0], line_width=2, line_color="yellow", line_dash="dashed")
+        
         trc1, trc2 = fitHelicalLattice(peaks[:npeaks], acf, da=da, dz=dz)
         trc_mean = consistent_twist_rise_cn_sets([trc1], [trc2], epsilon=1.0)
         success = True if trc_mean else False
 
-        twist_tmp, rise_tmp, cn = trc_mean
-        twist, rise = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_tmp, rise=rise_tmp, cn=cn)
-
-        h, w = acf.shape
-        h2 = 900   # final plot height
-        w2 = int(round(w * h2/h))//2*2
-
-        x = np.arange(-w//2, w//2)*da
-        y = np.arange(-h//2, h//2)*dz
-        tools = 'box_zoom,crosshair,pan,reset,save,wheel_zoom'
-        fig = figure(title_location="above", 
-            frame_width=w2, frame_height=h2, 
-            x_axis_label="twist (°)", y_axis_label="reise (Å)",
-            x_range=(-w//2*da, (w//2-1)*da), y_range=(-h//2*dz, (h//2-1)*dz), 
-            tools=tools)
-        fig.grid.visible = False
-        from bokeh.models import LinearColorMapper, Arrow, VeeHead, Line
-        color_mapper = LinearColorMapper(palette='Greys256')    # Greys256, Viridis256
-        image = fig.image(image=[acf], 
-            x=-w//2*da, y=-h//2*dz, dw=w*da, dh=h*dz, 
-            color_mapper=color_mapper)
-        from bokeh.models.tools import HoverTool
-        image_hover = HoverTool(renderers=[image])
-        fig.add_tools(image_hover)
-        fig.title.align = "center"
-        fig.title.text_font_size = "24px"
-        fig.title.text_font_style = "normal"
-        
         if success:
+            twist_tmp, rise_tmp, cn = trc_mean
+            twist, rise = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_tmp, rise=rise_tmp, cn=cn)
+
             fig.title.text = f"twist={twist:.2f}°  rise={rise:.2f}Å  csym=c{cn}"
-            fig.line([-w//2*dz, (w//2-1)*dz], [0, 0], line_width=2, line_color="yellow", line_dash="dashed")
+            fig.title.align = "center"
+            fig.title.text_font_size = "24px"
+            fig.title.text_font_style = "normal"
+
             fig.add_layout(Arrow(x_start=0, y_start=0, x_end=twist, y_end=rise, line_color="yellow", line_width=4, 
                 end=VeeHead(line_color="yellow", fill_color="yellow", line_width=2))
             )
@@ -184,6 +156,37 @@ def main():
 
     return
 
+def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, show_axis=True, show_toolbar=True):
+    from bokeh.plotting import figure
+    w, h = image.shape
+    w2 = plot_width if plot_width else w
+    h2 = plot_height if plot_height else h
+    tools = 'box_zoom,crosshair,pan,reset,save,wheel_zoom'
+    fig = figure(title_location=title_location, 
+        frame_width=w2, frame_height=h2, 
+        x_axis_label="twist (°)", y_axis_label="reise (Å)",
+        x_range=(-w//2*dx, (w//2-1)*dx), y_range=(-h//2*dy, (h//2-1)*dy), 
+        tools=tools)
+    fig.grid.visible = False
+    if title: fig.title.text=title
+    if not show_axis: fig.axis.visible = False
+    if not show_toolbar: fig.toolbar_location = None
+
+    source_data = dict(image=[image], x=[-w//2*dx], y=[-h//2*dy], dw=[w*dx], dh=[h*dy])
+    from bokeh.models import LinearColorMapper
+    color_mapper = LinearColorMapper(palette='Greys256')    # Greys256, Viridis256
+    image = fig.image(source=source_data, image='image', color_mapper=color_mapper,
+                x='x', y='y', dw='dw', dh='dh'
+            )
+
+    # add hover tool only for the image
+    from bokeh.models.tools import HoverTool
+    tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
+    image_hover = HoverTool(renderers=[image], tooltips=tooltips)
+    fig.add_tools(image_hover)
+    return fig
+
+@st.cache(persist=True, show_spinner=False)
 def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
     if len(peaks) < 3:
         st.warning(f"WARNING: only {len(peaks)} peaks were found. At least 3 peaks are required")
@@ -203,6 +206,7 @@ def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
     
     return (twist1, rise1, cn1), (twist2, rise2, cn2)
 
+@st.cache(persist=True, show_spinner=False)
 def consistent_twist_rise_cn_sets(twist_rise_cn_set_1, twist_rise_cn_set_2, epsilon=1.0):
     def consistent_twist_rise_cn_pair(twist_rise_cn_1, twist_rise_cn_2, epsilon=1.0):
         def good_twist_rise_cn(twist, rise, cn, epsilon=1):
@@ -232,6 +236,7 @@ def consistent_twist_rise_cn_sets(twist_rise_cn_set_1, twist_rise_cn_set_2, epsi
             if trc: return trc
     return None
 
+@st.cache(persist=True, show_spinner=False)
 def refine_twist_rise(acf_image, twist, rise, cn):
     from scipy.ndimage import map_coordinates
     from scipy.optimize import minimize
@@ -258,6 +263,7 @@ def refine_twist_rise(acf_image, twist, rise, cn):
     twist_opt, rise_opt = res.x
     return twist_opt, rise_opt
 
+@st.cache(persist=True, show_spinner=False)
 def getHelicalLattice(peaks):
     if len(peaks) < 3:
         st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
@@ -321,6 +327,7 @@ def getHelicalLattice(peaks):
 
     return (twist, rise, cn)
 
+@st.cache(persist=True, show_spinner=False)
 def getGenericLattice(peaks):
     if len(peaks) < 3:
         st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
@@ -415,11 +422,11 @@ def getGenericLattice(peaks):
     if bestLattice is None:
         # assume all peaks are along the same line of an arbitrary direction
         # fit a line through the peaks
-        from scipy import odr
+        from scipy.odr import Data, ODR, unilinear
         x = peaks[:, 0]
         y = peaks[:, 1]
-        odr_data = odr.Data(x, y)
-        odr_obj = odr.ODR(odr_data, odr.unilinear)
+        odr_data = Data(x, y)
+        odr_obj = ODR(odr_data, unilinear)
         output = odr_obj.run()
         x2 = x + output.delta   # positions on the fitted line
         y2 = y + output.eps
