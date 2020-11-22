@@ -14,34 +14,49 @@ def main():
         with st.beta_expander(label="README", expanded=False):
             st.write("This Web app considers a biological helical structure as a 2D crystal that has been rolled up into a cylindrical tube while preserving the original lattice. The indexing process is thus to computationally reverse this process: the 3D helical structure is first unrolled into a 2D image using cylindrical projection, and then the 2D lattice parameters are automatically identified from which the helical parameters (twist, rise, and cyclic symmetry) are derived. The auto-correlation function of the cylindrical projection is used to provide a lattice with sharper peaks. Two distinct lattice identification methods, one for generical 2D lattice and one specifically for helical lattice, are used to find a consistent solution.  \n  \nTips: play with the rmin/rmax, #peaks, axial step size parameters if consistent helical parameters cannot be obtained with the default parameters.  \n  \nTips: maximize the browser window or zoom-out the browser view (using ctrl- or ⌘- key combinations) if the displayed images overlap each other.")
         
-        url = "ftp://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
-        label = "Input the url of a 3D map or an EMDB ID (emd-XXXXX):"
-        url = st.text_input(label=label, value=url)
-        url = url.strip()
         data = None
-        if url.startswith("http") or url.startswith("ftp"):   # input is a url
-            data, apix = get_3d_map(url)
-        elif url.lower().find("emd-")!=-1:
-            emdb_ids = get_emdb_ids()
-            if emdb_ids:
-                emd_id = url.lower().split("emd-")[-1]
-                if emd_id in emdb_ids:
-                    data, apix = get_emdb_map(emd_id)
+        # make radio display horizontal
+        st.write('<style>div.Widget.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
+        input_mode = st.radio(label="How to obtain the input map:", options=["upload a mrc file", "url", "emd-xxxx"], index=1)
+        if input_mode == "upload a mrc file":
+            fileobj = st.file_uploader("Upload a mrc file", type=['mrc', 'map', 'map.gz'])
+            if fileobj is not None:
+                data, apix = get_3d_map_from_uploaded_file(fileobj)
+                nz, ny, nx = data.shape
+                if nz<32:
+                    st.warning(f"The uploaded file {fileobj.name} ({nx}x{ny}x{nz}) is not a 3D map")
+                    data = None
+        else:
+            if input_mode == "url":
+                label = "Input a url of a 3D map:"
+                value = "ftp://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
+                url = st.text_input(label=label, value=value)
+                data, apix = get_3d_map_from_url(url.strip())
+                nz, ny, nx = data.shape
+                if nz<32:
+                    st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
+                    data = None
+            elif input_mode == "emd-xxxx":
+                label = "Input an EMDB ID (emd-xxxx):"
+                value = "emd-10499"
+                emdid = st.text_input(label=label, value=value)
+                emdb_ids = get_emdb_ids()
+                if emdb_ids:
+                    emd_id = emdid.lower().split("emd-")[-1]
+                    if emd_id in emdb_ids:
+                        data, apix = get_emdb_map(emd_id)
+                    else:
+                        emd_id_bad = emd_id
+                        emd_id = random.choice(emdb_ids)
+                        st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id {emd_id})")
                 else:
-                    emd_id_bad = emd_id
-                    emd_id = random.choice(emdb_ids)
-                    st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id {emd_id})")
-            else:
-                st.warning("failed to obtained a list of helical structures in EMDB")
-        elif len(url):
-            st.warning(f"{url} is not a valid map link")
+                    st.warning("failed to obtained a list of helical structures in EMDB")
         if data is None:
             return
 
         nz, ny, nx = data.shape
         st.write(f'Map size: {nx}x{ny}x{nz} &emsp;Sampling: {apix:.4f} Å/voxel')
-        # make radio display horizontal
-        st.write('<style>div.Widget.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
+
         section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
         mapping = {"X":(nx, 2), "Y":(ny, 1), "Z":(nz, 0)}
         n, axis = mapping[section_axis]
@@ -60,10 +75,10 @@ def main():
             data = transform_map(data, shift_x=shiftx/apix, shift_y=shifty/apix, angle_x=rotx, angle_y=roty)
             image2 = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
             with container_image:
-                st.image([image, image2], width=w, caption=["Original", "Transformed"])
+                st.image([image, image2], clamp=True, width=w, caption=["Original", "Transformed"])
         else:
             with container_image:
-                st.image(image, width=w)
+                st.image(image, clamp=True, width=w)
 
         radprofile = compute_radial_profile(data)
         rad=np.arange(len(radprofile)) * apix
@@ -564,7 +579,7 @@ def cylindrical_projection(map3d, da=1, dz=1, dr=1, rmin=0, rmax=-1, interpolati
     coords = np.vstack((z_grid.flatten(), y_grid.flatten(), x_grid.flatten()))
 
     from scipy.ndimage.interpolation import map_coordinates
-    cylindrical_map = map_coordinates(map3d, coords, order=interpolation_order).reshape(z_grid.shape)
+    cylindrical_map = map_coordinates(map3d, coords, order=interpolation_order, mode='nearest').reshape(z_grid.shape)
     cylindrical_proj = (cylindrical_map*r_grid).sum(axis=2)/r_grid.sum(axis=2)
 
     cylindrical_proj = normalize(cylindrical_proj)
@@ -635,7 +650,7 @@ def transform_map(data, shift_x=0, shift_y=0, angle_x=0, angle_y=0):
     nx, ny, nz = data.shape
     bcenter = np.array((nx//2, ny//2, nz//2), dtype=np.float)
     offset = bcenter.T - np.dot(m, bcenter.T) + np.array([0.0, shift_y, -shift_x])
-    ret = affine_transform(data, matrix=m, offset=offset)
+    ret = affine_transform(data, matrix=m, offset=offset, mode='nearest')
     return ret
 
 @st.cache(persist=True, show_spinner=False)
@@ -646,18 +661,13 @@ def normalize(data, percentile=(0, 100)):
     return data2
 
 @st.cache(persist=True, show_spinner=False)
-def get_3d_map(url):
-    try:
-        ds = np.DataSource(None)
-        fp=ds.open(url)
-        import mrcfile
-        with mrcfile.open(fp.name) as mrc:
-            data = mrc.data
-            apix = mrc.voxel_size.x.item()
-        data = normalize(data, percentile=(0, 100))
-        return data, apix
-    except:
-        return None, None
+def get_3d_map_from_uploaded_file(fileobj):
+    import os, tempfile
+    orignal_filename = fileobj.name
+    suffix = os.path.splitext(orignal_filename)[-1]
+    with tempfile.NamedTemporaryFile(suffix=suffix) as temp:
+        temp.write(fileobj.read())
+        return get_3d_map_from_file(temp.name)
 
 @st.cache(persist=True, show_spinner=False, ttl=24*60*60.) # refresh every day
 def get_emdb_ids():
@@ -670,13 +680,26 @@ def get_emdb_ids():
     return emdb_ids
 
 @st.cache(persist=True, show_spinner=False)
-def get_emdb_map(emd_id):
-    emdb_ids = get_emdb_ids()
-    if emd_id in emdb_ids:
-        url = f"ftp://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-{emd_id}/map/emd_{emd_id}.map.gz"
-        return get_3d_map(url)
-    else:
-        return None, None
+def get_emdb_map(emdid):
+    emdid_number = emdid.lower().split("emd-")[-1]
+    url = f"ftp://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-{emdid_number}/map/emd_{emdid_number}.map.gz"
+    return get_3d_map_from_url(url)
+
+@st.cache(persist=True, show_spinner=False)
+def get_3d_map_from_url(url):
+    ds = np.DataSource(None)
+    fp=ds.open(url)
+    return get_3d_map_from_file(fp.name)
+
+@st.cache(persist=True, show_spinner=False)
+def get_3d_map_from_file(filename):
+    import mrcfile
+    data = None
+    with mrcfile.open(filename) as mrc:
+        apix = mrc.voxel_size.x.item()
+        is3d = mrc.is_volume() or mrc.is_volume_stack()
+        data = normalize(mrc.data)
+    return data, apix
 
 @st.cache(persist=True, show_spinner=False)
 def setup_anonymous_usage_tracking():
