@@ -12,7 +12,7 @@ def main():
 
     with col1:
         with st.beta_expander(label="README", expanded=False):
-            st.write("This Web app considers a biological helical structure as a 2D crystal that has been rolled up into a cylindrical tube while preserving the original lattice. The indexing process is thus to computationally reverse this process: the 3D helical structure is first unrolled into a 2D image using cylindrical projection, and then the 2D lattice parameters are automatically identified from which the helical parameters (twist, rise, and cyclic symmetry) are derived. The auto-correlation function of the cylindrical projection is used to provide a lattice with sharper peaks. Two distinct lattice identification methods, one for generical 2D lattice and one specifically for helical lattice, are used to find a consistent solution.  \n  \nTips: play with the rmin/rmax, #peaks, axial step size parameters if consistent helical parameters cannot be obtained with the default parameters.  \n  \nTips: maximize the browser window or zoom-out the browser view (using ctrl- or ⌘- key combinations) if the displayed images overlap each other.")
+            st.write("This Web app considers a biological helical structure as a 2D crystal that has been rolled up into a cylindrical tube while preserving the original lattice. The indexing process is thus to computationally reverse this process: the 3D helical structure is first unrolled into a 2D image using cylindrical projection, and then the 2D lattice parameters are automatically identified from which the helical parameters (twist, rise, and cyclic symmetry) are derived. The auto-correlation function of the cylindrical projection is used to provide a lattice with sharper peaks. Two distinct lattice identification methods, one for generical 2D lattice and one specifically for helical lattice, are used to find a consistent solution.  \n  \nTips: play with the rmin/rmax, #peaks, axial step size parameters if consistent helical parameters cannot be obtained with the default parameters. Use a larger axial step size (for example 2Å) for a structure with large rise.\n  \nTips: maximize the browser window or zoom-out the browser view (using ctrl- or ⌘- key combinations) if the displayed images overlap each other.")
         
         data = None
         # make radio display horizontal
@@ -84,7 +84,8 @@ def main():
         rad=np.arange(len(radprofile)) * apix
         from bokeh.plotting import figure
         tools = 'box_zoom,crosshair,hover,pan,reset,save,wheel_zoom'
-        p = figure(title="density radial profile", x_axis_label="r (Å)", y_axis_label="pixel value", frame_height=ny, tools=tools)
+        tooltips = [("r", "@x{0.0}Å"), ("val", "@y{0.0}"),]
+        p = figure(title="density radial profile", x_axis_label="r (Å)", y_axis_label="pixel value", frame_height=ny, tools=tools, tooltips=tooltips)
         p.line(rad, radprofile, line_width=2, color='red')
         st.bokeh_chart(p, use_container_width=True)
 
@@ -93,9 +94,13 @@ def main():
     with col2:
         da = st.number_input('Angular step size (°)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.1f")
         dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.1f")
-        rmin = st.number_input('rmin (Å)', value=0.0, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1f")
-        rmax = st.number_input('rmax (Å)', value=nx//2*apix, min_value=rmin+1.0, max_value=nx//2*apix, step=1.0, format="%.1f")
-
+        
+        rmin_auto, rmax_auto = estimate_radial_range(radprofile)
+        rmin = st.number_input('rmin (Å)', value=rmin_auto*apix, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1f")
+        rmax = st.number_input('rmax (Å)', value=rmax_auto*apix, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1f")
+        if rmax<=rmin:
+            st.warning(f"rmax(={rmax}) should be larger than rmin(={rmin})")
+            return
         data = auto_masking(data)
         data = minimal_grids(data)
         cylproj = cylindrical_projection(data, da=da, dz=dz/apix, dr=1, rmin=rmin/apix, rmax=rmax/apix, interpolation_order=1)
@@ -103,7 +108,10 @@ def main():
         cylproj_square = make_square_shape(cylproj)
         acf = auto_correlation(cylproj_square, high_pass_fraction=1./cylproj_square.shape[0])
         
-        peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, min_mass=0.5)
+        peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, minmass=1.0)
+        if peaks is None:
+            st.warning("Cannot find enough peaks from the auto-correlation image")
+            return
         npeaks_all = len(peaks)
         npeaks = st.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
 
@@ -177,7 +185,7 @@ def main():
                 end=VeeHead(line_color="yellow", fill_color="yellow", line_width=2))
             )
         else:
-            msg = "Failed to obtain consistent helical parameters. The two sollutions are:  \n"
+            msg = f"Failed to obtain consistent helical parameters using {npeaks} peaks. The two sollutions are:  \n"
             msg+= f"Twist per subunit: {trc1[0]:.2f}&emsp;{trc2[0]:.2f} °  \n"
             msg+= f"Rise &nbsp; per subunit: {trc1[1]:.2f}&emsp;&emsp;&emsp;{trc2[1]:.2f} Å  \n"
             msg+= f"Csym &emsp; &emsp; &emsp; &emsp; : c{trc1[2]}&emsp;&emsp;&emsp;&emsp;c{trc2[2]}"
@@ -296,7 +304,7 @@ def refine_twist_rise(acf_image, twist, rise, cn):
     twist_opt, rise_opt = res.x
     return twist_opt, rise_opt
 
-@st.cache(persist=True, show_spinner=False)
+@st.cache(persist=True, show_spinner=False, suppress_st_warning=True)
 def getHelicalLattice(peaks):
     if len(peaks) < 3:
         st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
@@ -360,7 +368,7 @@ def getHelicalLattice(peaks):
 
     return (twist, rise, cn)
 
-@st.cache(persist=True, show_spinner=False)
+@st.cache(persist=True, show_spinner=False, suppress_st_warning=True)
 def getGenericLattice(peaks):
     if len(peaks) < 3:
         st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
@@ -507,15 +515,18 @@ def getGenericLattice(peaks):
     return twist, rise, cn
 
 @st.cache(persist=True, show_spinner=False)
-def find_peaks(acf, da, dz, peak_diameter=0.025, min_mass=0.5):
+def find_peaks(acf, da, dz, peak_diameter=0.025, minmass=1.0, max_peaks=71):
     from trackpy import locate
     # diameter: fraction of the maximal dimension of the image (acf)
     diameter = int(max(acf.shape)*peak_diameter)//2*2+1
-    f = locate(acf, diameter=diameter, minmass=1)
-    f = f.sort_values(["mass"], ascending=False)
-    masses = f["mass"].values
-    thresh=masses[1]*min_mass
-    f = f[f["mass"] >= thresh]
+    while True:
+        f = locate(acf, diameter=diameter, minmass=minmass)
+        print("minmass", minmass, len(f))
+        if len(f)>3: break
+        minmass *= 0.9
+        if minmass<0.1:
+            return None
+    f = f.sort_values(["mass"], ascending=False)[:max_peaks]
     peaks = np.zeros((len(f), 2), dtype=float)
     peaks[:, 0] = f['x'].values - acf.shape[1]//2    # pixel
     peaks[:, 1] = f['y'].values - acf.shape[0]//2    # pixel
@@ -616,6 +627,14 @@ def auto_masking(map3d):
     else:
         masked = data
     return masked
+
+@st.cache(persist=True, show_spinner=False)
+def estimate_radial_range(radprofile, thresh_ratio=0.2):
+    thresh = (radprofile.max() - radprofile.min()) * thresh_ratio + radprofile.min()
+    indices = np.nonzero(radprofile>thresh)
+    rmin_auto = np.min(indices)
+    rmax_auto = np.max(indices)
+    return float(rmin_auto), float(rmax_auto)
 
 @st.cache(persist=True, show_spinner=False)
 def compute_radial_profile(data):
