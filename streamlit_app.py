@@ -521,7 +521,6 @@ def find_peaks(acf, da, dz, peak_diameter=0.025, minmass=1.0, max_peaks=71):
     diameter = int(max(acf.shape)*peak_diameter)//2*2+1
     while True:
         f = locate(acf, diameter=diameter, minmass=minmass)
-        print("minmass", minmass, len(f))
         if len(f)>3: break
         minmass *= 0.9
         if minmass<0.1:
