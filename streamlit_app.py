@@ -64,48 +64,119 @@ def main():
         container_image = st.beta_container()
 
         with st.beta_expander(label="Transform the map", expanded=False):
-            rotx = st.slider(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=0.0, step=1.0)
-            roty = st.slider(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=0.0, step=1.0)
-            shiftx = st.slider(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=0.0, step=1.0)
-            shifty = st.slider(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=0.0, step=1.0)
+            rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=0.0, step=1.0)
+            roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=0.0, step=1.0)
+            shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=0.0, step=1.0)
+            shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=0.0, step=1.0)
 
         image = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
         h, w = image.shape
         if rotx or roty or shiftx or shifty:
-            data = transform_map(data, shift_x=shiftx/apix, shift_y=shifty/apix, angle_x=rotx, angle_y=roty)
+            data = transform_map(data, shift_x=shiftx/apix, shift_y=-shifty/apix, angle_x=-rotx, angle_y=-roty)
             image2 = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
             with container_image:
-                st.image([image, image2], clamp=True, width=w, caption=["Original", "Transformed"])
+                tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
+                fig1 = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", 
+                        plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
+                fig2 = generate_bokeh_figure(image2, 1, 1, title=f"Transformed", title_location="below", 
+                        plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
+                
+                # create a linked crosshair tool among the figures
+                from bokeh.models import CrosshairTool
+                crosshair = CrosshairTool(dimensions="both")
+                crosshair.line_color = 'red'
+                fig1.add_tools(crosshair)
+                fig2.add_tools(crosshair)
+
+                from bokeh.layouts import gridplot
+                fig = gridplot([[fig1, fig2]], toolbar_location=None)
+                st.bokeh_chart(fig, use_container_width=False)
         else:
             with container_image:
-                st.image(image, clamp=True, width=w)
+                tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
+                fig = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", 
+                        plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
+                # create a linked crosshair tool among the figures
+                from bokeh.models import CrosshairTool
+                crosshair = CrosshairTool(dimensions="both")
+                crosshair.line_color = 'red'
+                fig.add_tools(crosshair)
+                st.bokeh_chart(fig, use_container_width=False)
 
-        radprofile = compute_radial_profile(data)
-        rad=np.arange(len(radprofile)) * apix
+        rad_plot = st.empty()
+
+        with st.beta_expander(label="Select radial range", expanded=False):
+            radprofile = compute_radial_profile(data)
+            rad = np.arange(len(radprofile)) * apix
+            rmin_auto, rmax_auto = estimate_radial_range(radprofile, thresh_ratio=0.1)
+            rmin = st.number_input('Minimal radius (Å)', value=rmin_auto*apix, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1f")
+            rmax = st.number_input('Maximal radius (Å)', value=rmax_auto*apix, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1f")
+            if rmax<=rmin:
+                st.warning(f"rmax(={rmax}) should be larger than rmin(={rmin})")
+                return
+
         from bokeh.plotting import figure
         tools = 'box_zoom,crosshair,hover,pan,reset,save,wheel_zoom'
         tooltips = [("r", "@x{0.0}Å"), ("val", "@y{0.0}"),]
         p = figure(title="density radial profile", x_axis_label="r (Å)", y_axis_label="pixel value", frame_height=ny, tools=tools, tooltips=tooltips)
         p.line(rad, radprofile, line_width=2, color='red')
-        st.bokeh_chart(p, use_container_width=True)
+        
+        from bokeh.models import Span
+        rmin_span = Span(location=rmin, dimension='height', line_color='green', line_dash='dashed', line_width=3)
+        rmax_span = Span(location=rmax, dimension='height', line_color='green', line_dash='dashed', line_width=3)
+        p.add_layout(rmin_span)
+        p.add_layout(rmax_span)
+        with rad_plot:
+            st.bokeh_chart(p, use_container_width=True)
 
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
+        st.text("") # workaround for a silly layout bug in streamlit 
 
     with col2:
         da = st.number_input('Angular step size (°)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.1f")
         dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.1f")
         
-        rmin_auto, rmax_auto = estimate_radial_range(radprofile)
-        rmin = st.number_input('rmin (Å)', value=rmin_auto*apix, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1f")
-        rmax = st.number_input('rmax (Å)', value=rmax_auto*apix, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1f")
-        if rmax<=rmin:
-            st.warning(f"rmax(={rmax}) should be larger than rmin(={rmin})")
-            return
+        npeaks_input = st.empty()
+        
         data = auto_masking(data)
         data = minimal_grids(data)
         cylproj = cylindrical_projection(data, da=da, dz=dz/apix, dr=1, rmin=rmin/apix, rmax=rmax/apix, interpolation_order=1)
 
-        cylproj_square = make_square_shape(cylproj)
+        cylproj_work = cylproj
+        draw_cylproj_box = False
+
+        st.subheader("Display:")
+        show_cylproj = st.checkbox(label="Cylindrical projection", value=True)
+        if show_cylproj:
+            nz, na = cylproj.shape
+            ang_min = st.number_input('Minimal angle (°)', value=-180., min_value=-180.0, max_value=180., step=1.0, format="%.1f")
+            ang_max = st.number_input('Maximal angle (°)', value=180., min_value=-180.0, max_value=180., step=1.0, format="%.1f")
+            if ang_max<=ang_min:
+                st.warning(f"'Maximal angle'(={ang_max}) should be larger than 'Minimal Angle'(={ang_min})")
+                return
+            z_min = st.number_input('Minimal z (Å)', value=-nz//2*dz, min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%.1f")
+            z_max = st.number_input('Maximal z (Å)', value=nz//2*dz, min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%.1f")
+            if z_max<=z_min:
+                st.warning(f"'Maximal z'(={z_max}) should be larger than 'Minimal z'(={z_min})")
+                return
+
+            if not (ang_min==-180 and ang_max==180 and z_min==-nz//2*dz and z_max==nz//2*dz):
+                draw_cylproj_box = True
+                cylproj_work = cylproj * 1.0
+                if ang_min>-180.:
+                    a0 = round(ang_min/da) + na//2
+                    cylproj_work[:, 0:a0] = 0
+                if ang_max<180.:
+                    a1 = round(ang_max/da)+ na//2
+                    cylproj_work[:, a1:] = 0
+                if z_min>-nz//2*dz:
+                    z0 = round(z_min/dz)+ nz//2
+                    cylproj_work[0:z0, :] = 0
+                if z_max<nz//2*dz:
+                    z1 = round(z_max/dz)+ nz//2
+                    cylproj_work[z1:, :] = 0
+
+        cylproj_square = make_square_shape(cylproj_work)
         acf = auto_correlation(cylproj_square, high_pass_fraction=1./cylproj_square.shape[0])
         
         peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, minmass=1.0)
@@ -113,24 +184,27 @@ def main():
             st.warning("Cannot find enough peaks from the auto-correlation image")
             return
         npeaks_all = len(peaks)
-        npeaks = st.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
+        with npeaks_input:
+            npeaks = st.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
 
-        st.subheader("Display:")
-        show_cylproj = st.checkbox(label="Cylindrical projection", value=True)
         show_acf = st.checkbox(label="Auto-correlation function", value=True)
         if show_acf:
             show_peaks = st.checkbox(label="Peaks", value=True)
+        st.text("") # workaround for a silly layout bug in streamlit 
         
     with col3:
         if show_cylproj:
             st.text("") # workaround for a streamlit layout bug
             h, w = cylproj.shape
-            tooltips = [("angle", "$x°"), ('axial', '$yÅ'), ('cylproj', '@image')]
+            tooltips = [("angle", "$x°"), ('z', '$yÅ'), ('cylproj', '@image')]
             fig = generate_bokeh_figure(cylproj, da, dz, title=f"Cylindrical Projection ({w}x{h})", title_location="below", 
                     plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
-            fig.title.align = "center"
-            fig.title.text_font_size = "18px"
-            fig.title.text_font_style = "normal"
+
+            if draw_cylproj_box:
+                from bokeh.models import Rect
+                cylproj_box = Rect(x=(ang_min+ang_max)/2, y=(z_min+z_max)/2, width=ang_max-ang_min, height=z_max-z_min, angle=0, line_width=3, line_dash='dashed', line_color='yellow', fill_color=None)
+                fig.add_glyph(cylproj_box)
+
             st.bokeh_chart(fig, use_container_width=True)
 
         if show_acf:
@@ -139,10 +213,6 @@ def main():
             tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
             fig = generate_bokeh_figure(acf, da, dz, title=f"Auto-correlation function ({w}x{h})", title_location="below", 
                     plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
-            fig.title.align = "center"
-            fig.title.text_font_size = "18px"
-            fig.title.text_font_style = "normal"
-
             if show_peaks:
                 x = peaks[:npeaks, 0]
                 y = peaks[:npeaks, 1]
@@ -152,6 +222,7 @@ def main():
                 fig.circle(x, y, size=size, line_width=2, line_color='yellow', fill_alpha=0)
 
             st.bokeh_chart(fig, use_container_width=True)
+        st.text("") # workaround for a silly layout bug in streamlit 
 
     with col4:
         h, w = acf.shape
@@ -191,6 +262,7 @@ def main():
             msg+= f"Csym &emsp; &emsp; &emsp; &emsp; : c{trc1[2]}&emsp;&emsp;&emsp;&emsp;c{trc2[2]}"
             st.warning(msg)
 
+        st.text("") # workaround for a silly layout bug in streamlit 
         st.bokeh_chart(fig, use_container_width=True)
 
     return
@@ -208,7 +280,11 @@ def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_
         x_range=(-w//2*dx, (w//2-1)*dx), y_range=(-h//2*dy, (h//2-1)*dy), 
         tools=tools)
     fig.grid.visible = False
-    if title: fig.title.text=title
+    if title:
+        fig.title.text=title
+        fig.title.align = "center"
+        fig.title.text_font_size = "18px"
+        fig.title.text_font_style = "normal"
     if not show_axis: fig.axis.visible = False
     if not show_toolbar: fig.toolbar_location = None
 
@@ -628,8 +704,9 @@ def auto_masking(map3d):
     return masked
 
 @st.cache(persist=True, show_spinner=False)
-def estimate_radial_range(radprofile, thresh_ratio=0.2):
-    thresh = (radprofile.max() - radprofile.min()) * thresh_ratio + radprofile.min()
+def estimate_radial_range(radprofile, thresh_ratio=0.1):
+    background = np.mean(radprofile[[0,1,-2,-1]])
+    thresh = (radprofile.max() - background) * thresh_ratio + background
     indices = np.nonzero(radprofile>thresh)
     rmin_auto = np.min(indices)
     rmax_auto = np.max(indices)
