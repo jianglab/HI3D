@@ -76,32 +76,24 @@ def main():
             image2 = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
-                fig1 = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", 
-                        plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
-                fig2 = generate_bokeh_figure(image2, 1, 1, title=f"Transformed", title_location="below", 
-                        plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
+                fig1 = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
+                fig2 = generate_bokeh_figure(image2, 1, 1, title=f"Transformed", title_location="below", plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
                 
                 # create a linked crosshair tool among the figures
                 from bokeh.models import CrosshairTool
                 crosshair = CrosshairTool(dimensions="both")
-                crosshair.line_color = 'red'
+                crosshair.line_color = 'white'
                 fig1.add_tools(crosshair)
                 fig2.add_tools(crosshair)
 
                 from bokeh.layouts import gridplot
-                fig = gridplot([[fig1, fig2]], toolbar_location=None)
-                st.bokeh_chart(fig, use_container_width=False)
+                fig_image = gridplot([[fig1, fig2]], toolbar_location=None)
+                st.bokeh_chart(fig_image, use_container_width=False)
         else:
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
-                fig = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", 
-                        plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
-                # create a linked crosshair tool among the figures
-                from bokeh.models import CrosshairTool
-                crosshair = CrosshairTool(dimensions="both")
-                crosshair.line_color = 'red'
-                fig.add_tools(crosshair)
-                st.bokeh_chart(fig, use_container_width=False)
+                fig_image = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
+                st.bokeh_chart(fig_image, use_container_width=False)
 
         rad_plot = st.empty()
 
@@ -118,25 +110,22 @@ def main():
         from bokeh.plotting import figure
         tools = 'box_zoom,crosshair,hover,pan,reset,save,wheel_zoom'
         tooltips = [("r", "@x{0.0}Å"), ("val", "@y{0.0}"),]
-        p = figure(title="density radial profile", x_axis_label="r (Å)", y_axis_label="pixel value", frame_height=ny, tools=tools, tooltips=tooltips)
-        p.line(rad, radprofile, line_width=2, color='red')
+        fig_radprofile = figure(title="density radial profile", x_axis_label="r (Å)", y_axis_label="pixel value", frame_height=ny, tools=tools, tooltips=tooltips)
+        fig_radprofile.line(rad, radprofile, line_width=2, color='red')
         
         from bokeh.models import Span
         rmin_span = Span(location=rmin, dimension='height', line_color='green', line_dash='dashed', line_width=3)
         rmax_span = Span(location=rmax, dimension='height', line_color='green', line_dash='dashed', line_width=3)
-        p.add_layout(rmin_span)
-        p.add_layout(rmax_span)
+        fig_radprofile.add_layout(rmin_span)
+        fig_radprofile.add_layout(rmax_span)
         with rad_plot:
-            st.bokeh_chart(p, use_container_width=True)
+            st.bokeh_chart(fig_radprofile, use_container_width=True)
 
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
-        st.text("") # workaround for a silly layout bug in streamlit 
 
     with col2:
         da = st.number_input('Angular step size (°)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.1f")
         dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.1f")
-        
-        npeaks_input = st.empty()
         
         data = auto_masking(data)
         data = minimal_grids(data)
@@ -151,9 +140,6 @@ def main():
             nz, na = cylproj.shape
             ang_min = st.number_input('Minimal angle (°)', value=-180., min_value=-180.0, max_value=180., step=1.0, format="%.1f")
             ang_max = st.number_input('Maximal angle (°)', value=180., min_value=-180.0, max_value=180., step=1.0, format="%.1f")
-            if ang_max<=ang_min:
-                st.warning(f"'Maximal angle'(={ang_max}) should be larger than 'Minimal Angle'(={ang_min})")
-                return
             z_min = st.number_input('Minimal z (Å)', value=-nz//2*dz, min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%.1f")
             z_max = st.number_input('Maximal z (Å)', value=nz//2*dz, min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%.1f")
             if z_max<=z_min:
@@ -163,12 +149,20 @@ def main():
             if not (ang_min==-180 and ang_max==180 and z_min==-nz//2*dz and z_max==nz//2*dz):
                 draw_cylproj_box = True
                 cylproj_work = cylproj * 1.0
-                if ang_min>-180.:
-                    a0 = round(ang_min/da) + na//2
-                    cylproj_work[:, 0:a0] = 0
-                if ang_max<180.:
-                    a1 = round(ang_max/da)+ na//2
-                    cylproj_work[:, a1:] = 0
+                if ang_min<ang_max:
+                    if ang_min>-180.:
+                        a0 = round(ang_min/da) + na//2
+                        cylproj_work[:, 0:a0] = 0
+                    if ang_max<180.:
+                        a1 = round(ang_max/da)+ na//2
+                        cylproj_work[:, a1:] = 0
+                else: # wrap around
+                    if ang_min<180:
+                        a0 = round(ang_min/da) + na//2
+                        cylproj_work[:, a0:] = 0
+                    if ang_max>-180:
+                        a1 = round(ang_max/da)+ na//2
+                        cylproj_work[:, 0:a1] = 0
                 if z_min>-nz//2*dz:
                     z0 = round(z_min/dz)+ nz//2
                     cylproj_work[0:z0, :] = 0
@@ -178,52 +172,53 @@ def main():
 
         cylproj_square = make_square_shape(cylproj_work)
         acf = auto_correlation(cylproj_square, high_pass_fraction=1./cylproj_square.shape[0])
-        
+
         peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, minmass=1.0)
         if peaks is None:
             st.warning("Cannot find enough peaks from the auto-correlation image")
             return
-        npeaks_all = len(peaks)
-        with npeaks_input:
-            npeaks = st.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
-
+        npeaks = len(peaks)
+        
         show_acf = st.checkbox(label="Auto-correlation function", value=True)
         if show_acf:
             show_peaks = st.checkbox(label="Peaks", value=True)
-        st.text("") # workaround for a silly layout bug in streamlit 
+            if show_peaks:
+                npeaks_all = len(peaks)
+                npeaks = st.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
         
     with col3:
         if show_cylproj:
             st.text("") # workaround for a streamlit layout bug
             h, w = cylproj.shape
             tooltips = [("angle", "$x°"), ('z', '$yÅ'), ('cylproj', '@image')]
-            fig = generate_bokeh_figure(cylproj, da, dz, title=f"Cylindrical Projection ({w}x{h})", title_location="below", 
-                    plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
+            fig_cylproj = generate_bokeh_figure(cylproj, da, dz, title=f"Cylindrical Projection ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
 
             if draw_cylproj_box:
-                from bokeh.models import Rect
-                cylproj_box = Rect(x=(ang_min+ang_max)/2, y=(z_min+z_max)/2, width=ang_max-ang_min, height=z_max-z_min, angle=0, line_width=3, line_dash='dashed', line_color='yellow', fill_color=None)
-                fig.add_glyph(cylproj_box)
+                if ang_min<ang_max:
+                    fig_cylproj.quad(left=ang_min, right=ang_max, bottom=z_min, top=z_max, line_color=None, fill_color='yellow', fill_alpha=0.5)
+                else:
+                    fig_cylproj.quad(left=ang_min, right=180, bottom=z_min, top=z_max, line_color=None, fill_color='yellow', fill_alpha=0.5)
+                    fig_cylproj.quad(left=-180, right=ang_max, bottom=z_min, top=z_max, line_color=None, fill_color='yellow', fill_alpha=0.5)
 
-            st.bokeh_chart(fig, use_container_width=True)
+            st.text("") # workaround for a layout bug in streamlit 
+            st.bokeh_chart(fig_cylproj, use_container_width=True)
 
         if show_acf:
             st.text("") # workaround for a streamlit layout bug
             h, w = acf.shape
             tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
-            fig = generate_bokeh_figure(acf, da, dz, title=f"Auto-correlation function ({w}x{h})", title_location="below", 
-                    plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False)
+            fig_acf = generate_bokeh_figure(acf, da, dz, title=f"Auto-Correlation Function ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
             if show_peaks:
                 x = peaks[:npeaks, 0]
                 y = peaks[:npeaks, 1]
                 xs = np.sort(x)
                 ys = np.sort(y)
                 size = 30/(da+dz)
-                fig.circle(x, y, size=size, line_width=2, line_color='yellow', fill_alpha=0)
+                fig_acf.circle(x, y, size=size, line_width=2, line_color='yellow', fill_alpha=0)
 
-            st.bokeh_chart(fig, use_container_width=True)
-        st.text("") # workaround for a silly layout bug in streamlit 
-
+            st.text("") # workaround for a layout bug in streamlit 
+            st.bokeh_chart(fig_acf, use_container_width=True)
+            
     with col4:
         h, w = acf.shape
         h2 = 900   # final plot height
@@ -231,13 +226,11 @@ def main():
         x_axis_label="twist (°)"
         y_axis_label="reise (Å)"
         tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
-        fig = generate_bokeh_figure(image=acf, dx=da, dy=dz, title="", title_location="above", 
-                plot_width=w2, plot_height=h2, x_axis_label=x_axis_label, y_axis_label=y_axis_label,
-                tooltips=tooltips, show_axis=True, show_toolbar=True)
+        fig_indexing = generate_bokeh_figure(image=acf, dx=da, dy=dz, title="", title_location="above", plot_width=w2, plot_height=h2, x_axis_label=x_axis_label, y_axis_label=y_axis_label, tooltips=tooltips, show_axis=True, show_toolbar=True, crosshair_color="white")
 
         # horizontal line along the equator
         from bokeh.models import LinearColorMapper, Arrow, VeeHead, Line
-        fig.line([-w//2*dz, (w//2-1)*dz], [0, 0], line_width=2, line_color="yellow", line_dash="dashed")
+        fig_indexing.line([-w//2*dz, (w//2-1)*dz], [0, 0], line_width=2, line_color="yellow", line_dash="dashed")
         
         trc1, trc2 = fitHelicalLattice(peaks[:npeaks], acf, da=da, dz=dz)
         trc_mean = consistent_twist_rise_cn_sets([trc1], [trc2], epsilon=1.0)
@@ -247,12 +240,12 @@ def main():
             twist_tmp, rise_tmp, cn = trc_mean
             twist, rise = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_tmp, rise=rise_tmp, cn=cn)
 
-            fig.title.text = f"twist={twist:.2f}°  rise={rise:.2f}Å  csym=c{cn}"
-            fig.title.align = "center"
-            fig.title.text_font_size = "24px"
-            fig.title.text_font_style = "normal"
+            fig_indexing.title.text = f"twist={twist:.2f}°  rise={rise:.2f}Å  csym=c{cn}"
+            fig_indexing.title.align = "center"
+            fig_indexing.title.text_font_size = "24px"
+            fig_indexing.title.text_font_style = "normal"
 
-            fig.add_layout(Arrow(x_start=0, y_start=0, x_end=twist, y_end=rise, line_color="yellow", line_width=4, 
+            fig_indexing.add_layout(Arrow(x_start=0, y_start=0, x_end=twist, y_end=rise, line_color="yellow", line_width=4, 
                 end=VeeHead(line_color="yellow", fill_color="yellow", line_width=2))
             )
         else:
@@ -262,13 +255,12 @@ def main():
             msg+= f"Csym &emsp; &emsp; &emsp; &emsp; : c{trc1[2]}&emsp;&emsp;&emsp;&emsp;c{trc2[2]}"
             st.warning(msg)
 
-        st.text("") # workaround for a silly layout bug in streamlit 
-        st.bokeh_chart(fig, use_container_width=True)
+        st.text("") # workaround for a layout bug in streamlit 
+        st.bokeh_chart(fig_indexing, use_container_width=True)
 
     return
 
-def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, 
-    x_axis_label='x', y_axis_label='y', tooltips=None, show_axis=True, show_toolbar=True):
+def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, x_axis_label='x', y_axis_label='y', tooltips=None, show_axis=True, show_toolbar=True, crosshair_color="white"):
     from bokeh.plotting import figure
     h, w = image.shape
     w2 = plot_width if plot_width else w
@@ -296,11 +288,14 @@ def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_
             )
 
     # add hover tool only for the image
-    from bokeh.models.tools import HoverTool
+    from bokeh.models.tools import HoverTool, CrosshairTool
     if not tooltips:
         tooltips = [("x", "$x°"), ('y', '$yÅ'), ('val', '@image')]
     image_hover = HoverTool(renderers=[image], tooltips=tooltips)
     fig.add_tools(image_hover)
+    crosshair = [t for t in fig.tools if isinstance(t, CrosshairTool)]
+    if crosshair: 
+        for ch in crosshair: ch.line_color = crosshair_color
     return fig
 
 @st.cache(persist=True, show_spinner=False)
@@ -705,7 +700,7 @@ def auto_masking(map3d):
 
 @st.cache(persist=True, show_spinner=False)
 def estimate_radial_range(radprofile, thresh_ratio=0.1):
-    background = np.mean(radprofile[[0,1,-2,-1]])
+    background = np.mean(radprofile[-3:])
     thresh = (radprofile.max() - background) * thresh_ratio + background
     indices = np.nonzero(radprofile>thresh)
     rmin_auto = np.min(indices)
