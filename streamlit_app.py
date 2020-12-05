@@ -64,10 +64,15 @@ def main():
         container_image = st.beta_container()
 
         with st.beta_expander(label="Transform the map", expanded=False):
-            rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=0.0, step=1.0)
-            roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=0.0, step=1.0)
-            shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=0.0, step=1.0)
-            shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=0.0, step=1.0)
+            if input_mode == "emd-xxxx":
+                rotx_auto, roty_auto, shiftx_auto, shifty_auto = 0., 0., 0., 0.
+            else:
+                rotx_auto, shifty_auto = auto_vertical_center(np.sum(data, axis=2))
+                roty_auto, shiftx_auto = auto_vertical_center(np.sum(data, axis=1))
+            rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=rotx_auto, step=1.0)
+            roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=roty_auto, step=1.0)
+            shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=shiftx_auto*apix, step=1.0)
+            shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=shifty_auto*apix, step=1.0)
 
         image = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
         h, w = image.shape
@@ -76,19 +81,44 @@ def main():
             image2 = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
-                fig1 = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
-                fig2 = generate_bokeh_figure(image2, 1, 1, title=f"Transformed", title_location="below", plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
+                fig1 = generate_bokeh_figure(image, apix, apix, title=f"Original", title_location="below", plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
+                fig2 = generate_bokeh_figure(image2, apix, apix, title=f"Transformed", title_location="below", plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
+
+                from bokeh.plotting import figure
+                x = (np.arange(0, w)-w//2) * apix
+                ymax = np.max(image2, axis=0)
+                ymean = np.mean(image2, axis=0)
+                fig4 = figure(x_axis_label=None, y_axis_label=None, frame_height=min(h,w), frame_width=w, x_range=fig2.x_range)
+                fig4.line(x, ymax, line_width=2, color='red', legend_label="max")
+                fig4.line(-x, ymax, line_width=2, color='red', line_dash="dashed", legend_label="max flipped")
+                fig4.line(x, ymean, line_width=2, color='blue', legend_label="mean")
+                fig4.line(-x, ymean, line_width=2, color='blue', line_dash="dashed", legend_label="mean flipped")
+                fig4.xaxis.visible = False
+                fig4.yaxis.visible = False
+                fig4.legend.visible=False
+                ymax = np.max(image, axis=0)
+                ymean = np.mean(image, axis=0)
+                fig3 = figure(x_axis_label=None, y_axis_label=None, frame_height=min(h,w), frame_width=w, x_range=fig4.x_range,  y_range=fig4.y_range)
+                fig3.line(x, ymax, line_width=2, color='red', legend_label="max")
+                fig3.line(-x, ymax, line_width=2, color='red', line_dash="dashed", legend_label="max flipped")
+                fig3.line(x, ymean, line_width=2, color='blue', legend_label="mean")
+                fig3.line(-x, ymean, line_width=2, color='blue', line_dash="dashed", legend_label="mean flipped")
+                fig3.xaxis.visible = False
+                fig3.yaxis.visible = False
+                fig3.legend.visible=False
                 
                 # create a linked crosshair tool among the figures
                 from bokeh.models import CrosshairTool
                 crosshair = CrosshairTool(dimensions="both")
-                crosshair.line_color = 'white'
+                crosshair.line_color = 'red'
                 fig1.add_tools(crosshair)
                 fig2.add_tools(crosshair)
+                fig3.add_tools(crosshair)
+                fig4.add_tools(crosshair)
 
                 from bokeh.layouts import gridplot
-                fig_image = gridplot([[fig1, fig2]], toolbar_location=None)
-                st.bokeh_chart(fig_image, use_container_width=False)
+                fig_image = gridplot([[fig3, fig4], [fig1, fig2]], toolbar_location=None)
+                st.bokeh_chart(fig_image, use_container_width=True)
         else:
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
@@ -735,12 +765,89 @@ def transform_map(data, shift_x=0, shift_y=0, angle_x=0, angle_y=0):
     from scipy.ndimage import affine_transform
     # note the convention change
     # xyz in scipy is zyx in cryoEM maps
-    rot = R.from_euler('zy', [angle_x, -angle_y], degrees=True)
+    rot = R.from_euler('zy', [-angle_x, angle_y], degrees=True)
     m = rot.as_matrix()
     nx, ny, nz = data.shape
     bcenter = np.array((nx//2, ny//2, nz//2), dtype=np.float)
     offset = bcenter.T - np.dot(m, bcenter.T) + np.array([0.0, shift_y, -shift_x])
     ret = affine_transform(data, matrix=m, offset=offset, mode='nearest')
+    return ret
+
+@st.cache(persist=True, show_spinner=False)
+def auto_vertical_center(image):
+    background = np.mean(image[[0,1,2,-3,-2,-1],[0,1,2,-3,-2,-1]])
+    thresh = (image.max()-background) * 0.2 + background
+    image_work = 1.0 * image
+    image_work[image<thresh] = 0
+
+    # rough estimate of rotation
+    def score_rotation(angle):
+        tmp = rotate_shift_image(data=image_work, angle=angle)
+        y_proj = tmp.sum(axis=0)
+        percentiles = (100, 95, 90, 85, 80) # more robust than max alone
+        y_values = np.percentile(y_proj, percentiles)
+        err = -np.sum(y_values)
+        return err
+    from scipy.optimize import minimize_scalar
+    res = minimize_scalar(score_rotation, bounds=(-90, 90), method='bounded')
+    angle = res.x
+
+    # further refine rotation
+    def score_rotation_shift(x):
+        angle, dy, dx = x
+        tmp1 = rotate_shift_image(data=image_work, angle=angle, pre_shift=(dy, dx))
+        tmp2 = rotate_shift_image(data=image_work, angle=angle+180, pre_shift=(dy, dx))
+        tmps = [tmp1, tmp2, tmp1[::-1,:], tmp2[::-1,:], tmp1[:,::-1], tmp2[:,::-1]]
+        tmp_mean = np.zeros_like(image_work)
+        for tmp in tmps: tmp_mean += tmp
+        tmp_mean /= len(tmps)
+        err = 0
+        for tmp in tmps:
+            err += np.sum(np.abs(tmp - tmp_mean))
+        err /= len(tmps) * image_work.size
+        return err
+    from scipy.optimize import fmin
+    res = fmin(score_rotation_shift, x0=(angle, 0, 0), xtol=1e-2)
+    angle = res[0]  # dy, dx are not robust enough
+
+    # refine dx 
+    image_work = rotate_shift_image(data=image_work, angle=angle)
+    y = np.sum(image_work, axis=0)
+    n = len(y)
+    from scipy.ndimage.measurements import center_of_mass
+    cx = int(round(center_of_mass(y)[0]))
+    max_shift = abs((cx-n//2)*2)+3
+
+    import scipy.interpolate as interpolate
+    x = np.arange(3*n)
+    f = interpolate.interp1d(x, np.tile(y, 3), kind='cubic')    # avoid out-of-bound errors
+    def score_shift(dx):
+        x_tmp = x[n:2*n]-dx
+        tmp = f(x_tmp)
+        err = np.sum(np.abs(tmp-tmp[::-1]))
+        return err
+    res = minimize_scalar(score_shift, bounds=(-max_shift, max_shift), method='bounded')
+    dx = res.x + (0.0 if n%2 else 0.5)
+    return angle, dx
+
+@st.cache(persist=True, show_spinner=False)
+def rotate_shift_image(data, angle=0, pre_shift=(0, 0), post_shift=(0, 0), rotation_center=None, order=1):
+    # pre_shift/rotation_center/post_shift: [y, x]
+    if angle==0 and pre_shift==[0,0] and post_shift==[0,0]: return data*1.0
+    ny, nx = data.shape
+    if rotation_center is None:
+        rotation_center = np.array((ny//2, nx//2), dtype=np.float32)
+    ang = np.deg2rad(angle)
+    m = np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]], dtype=np.float32)
+    pre_dy, pre_dx = pre_shift    
+    post_dy, post_dx = post_shift
+
+    offset = -np.dot(m, np.array([post_dy, post_dx], dtype=np.float32).T) # post_rotation shift
+    offset += np.array(rotation_center, dtype=np.float32).T - np.dot(m, np.array(rotation_center, dtype=np.float32).T)  # rotation around the specified center
+    offset += -np.array([pre_dy, pre_dx], dtype=np.float32).T     # pre-rotation shift
+
+    from scipy.ndimage import affine_transform
+    ret = affine_transform(data, matrix=m, offset=offset, order=order, mode='constant')
     return ret
 
 @st.cache(persist=True, show_spinner=False)
