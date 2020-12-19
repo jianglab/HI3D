@@ -5,6 +5,8 @@ import math, random
 def main():
     st.set_page_config(page_title="Helical Indexing", layout="wide")
 
+    query_params = st.experimental_get_query_params()
+
     title = "Helical indexing using the cylindrical projection of a 3D map"
     st.title(title)
 
@@ -17,8 +19,10 @@ def main():
         data = None
         # make radio display horizontal
         st.write('<style>div.Widget.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
-        input_mode = st.radio(label="How to obtain the input map:", options=["upload a mrc file", "url", "emd-xxxx"], index=1)
-        if input_mode == "upload a mrc file":
+        input_modes = {0:"upload a mrc/mrcs file", 1:"url", 2:"emd-xxxx"}
+        value = int(query_params["input_mode"][0]) if "input_mode" in query_params else 1
+        input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value)
+        if input_mode == 0: # "upload a mrc file":
             fileobj = st.file_uploader("Upload a mrc file", type=['mrc', 'map', 'map.gz'])
             if fileobj is not None:
                 data, apix = get_3d_map_from_uploaded_file(fileobj)
@@ -27,18 +31,18 @@ def main():
                     st.warning(f"The uploaded file {fileobj.name} ({nx}x{ny}x{nz}) is not a 3D map")
                     data = None
         else:
-            if input_mode == "url":
+            if input_mode == 1: # "url":
                 label = "Input a url of a 3D map:"
-                value = "ftp://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
+                value = query_params["url"][0] if "url" in query_params else "ftp://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
                 url = st.text_input(label=label, value=value)
                 data, apix = get_3d_map_from_url(url.strip())
                 nz, ny, nx = data.shape
                 if nz<32:
                     st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
                     data = None
-            elif input_mode == "emd-xxxx":
+            elif input_mode == 2:   # "emd-xxxx":
                 label = "Input an EMDB ID (emd-xxxx):"
-                value = "emd-10499"
+                value = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
                 emdid = st.text_input(label=label, value=value)
                 emdb_ids = get_emdb_ids()
                 if emdb_ids:
@@ -288,7 +292,12 @@ def main():
         st.text("") # workaround for a layout bug in streamlit 
         st.bokeh_chart(fig_indexing, use_container_width=True)
 
-    return
+    if input_mode == 2:
+        st.experimental_set_query_params(input_mode=2, emdid=emdid)
+    elif input_mode == 1:
+        st.experimental_set_query_params(input_mode=1, url=url)
+    else:
+        st.experimental_set_query_params()
 
 def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, x_axis_label='x', y_axis_label='y', tooltips=None, show_axis=True, show_toolbar=True, crosshair_color="white"):
     from bokeh.plotting import figure
