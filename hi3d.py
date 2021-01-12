@@ -1,16 +1,55 @@
+""" 
+MIT License
+
+Copyright (c) 2020-2021 Wen Jiang
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+
+def import_with_auto_install(packages, scope=locals()):
+    if isinstance(packages, str): packages=[packages]
+    for package in packages:
+        if package.find(":")!=-1:
+            package_import_name, package_pip_name = package.split(":")
+        else:
+            package_import_name, package_pip_name = package, package
+        try:
+            scope[package_import_name] = __import__(package_import_name)
+        except ImportError:
+            import subprocess
+            subprocess.call(f'pip install {package_pip_name}', shell=True)
+            scope[package_import_name] =  __import__(package_import_name)
+required_packages = "streamlit numpy scipy pandas bokeh skimage:scikit_image mrcfile trackpy".split()
+import_with_auto_install(required_packages)
+
 import streamlit as st
 import numpy as np
 import math, random
 
 def main():
-    st.set_page_config(page_title="Helical Indexing", layout="wide")
+    title = "HI3D: Helical indexing using the cylindrical projection of a 3D map"
+    st.set_page_config(page_title=title, layout="wide")
+    st.title(title)
 
     query_params = st.experimental_get_query_params()
 
-    title = "Helical indexing using the cylindrical projection of a 3D map"
-    st.title(title)
-
-    col1, col4, col2, col3 = st.beta_columns((1.0, 1.65, 0.3, 1.))
+    col1, col2, col3, col4 = st.beta_columns((1.0, 3.2, 0.6, 1.15))
 
     with col1:
         with st.beta_expander(label="README", expanded=False):
@@ -18,8 +57,8 @@ def main():
         
         data = None
         # make radio display horizontal
-        st.write('<style>div.Widget.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
-        input_modes = {0:"upload a mrc/mrcs file", 1:"url", 2:"emd-xxxx"}
+        st.markdown('<style>div.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
+        input_modes = {0:"upload", 1:"url", 2:"emd-xxxx"}
         value = int(query_params["input_mode"][0]) if "input_mode" in query_params else 1
         input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value)
         if input_mode == 0: # "upload a mrc file":
@@ -59,7 +98,7 @@ def main():
             return
 
         nz, ny, nx = data.shape
-        st.write(f'Map size: {nx}x{ny}x{nz} &emsp;Sampling: {apix:.4f} Å/voxel')
+        st.markdown(f'Map size: {nx}x{ny}x{nz}  Sampling: {apix:.4f} Å/voxel')
 
         section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
         mapping = {"X":(nx, 2), "Y":(ny, 1), "Z":(nz, 0)}
@@ -85,14 +124,14 @@ def main():
             image2 = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
-                fig1 = generate_bokeh_figure(image, apix, apix, title=f"Original", title_location="below", plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
-                fig2 = generate_bokeh_figure(image2, apix, apix, title=f"Transformed", title_location="below", plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
+                fig1 = generate_bokeh_figure(image, apix, apix, title=f"Original", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
+                fig2 = generate_bokeh_figure(image2, apix, apix, title=f"Transformed", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
 
                 from bokeh.plotting import figure
                 x = (np.arange(0, w)-w//2) * apix
                 ymax = np.max(image2, axis=0)
                 ymean = np.mean(image2, axis=0)
-                fig4 = figure(x_axis_label=None, y_axis_label=None, frame_height=min(h,w), frame_width=w, x_range=fig2.x_range)
+                fig4 = figure(x_axis_label=None, y_axis_label=None, x_range=fig2.x_range, aspect_ratio=3)
                 fig4.line(x, ymax, line_width=2, color='red', legend_label="max")
                 fig4.line(-x, ymax, line_width=2, color='red', line_dash="dashed", legend_label="max flipped")
                 fig4.line(x, ymean, line_width=2, color='blue', legend_label="mean")
@@ -100,9 +139,10 @@ def main():
                 fig4.xaxis.visible = False
                 fig4.yaxis.visible = False
                 fig4.legend.visible=False
+                fig4.toolbar_location = None
                 ymax = np.max(image, axis=0)
                 ymean = np.mean(image, axis=0)
-                fig3 = figure(x_axis_label=None, y_axis_label=None, frame_height=min(h,w), frame_width=w, x_range=fig4.x_range,  y_range=fig4.y_range)
+                fig3 = figure(x_axis_label=None, y_axis_label=None, x_range=fig1.x_range, aspect_ratio=3)
                 fig3.line(x, ymax, line_width=2, color='red', legend_label="max")
                 fig3.line(-x, ymax, line_width=2, color='red', line_dash="dashed", legend_label="max flipped")
                 fig3.line(x, ymean, line_width=2, color='blue', legend_label="mean")
@@ -110,6 +150,7 @@ def main():
                 fig3.xaxis.visible = False
                 fig3.yaxis.visible = False
                 fig3.legend.visible=False
+                fig3.toolbar_location = None
                 
                 # create a linked crosshair tool among the figures
                 from bokeh.models import CrosshairTool
@@ -117,17 +158,21 @@ def main():
                 crosshair.line_color = 'red'
                 fig1.add_tools(crosshair)
                 fig2.add_tools(crosshair)
+                crosshair = CrosshairTool(dimensions="height")
+                crosshair.line_color = 'red'
+                fig1.add_tools(crosshair)
+                fig2.add_tools(crosshair)
                 fig3.add_tools(crosshair)
                 fig4.add_tools(crosshair)
 
-                from bokeh.layouts import gridplot
-                fig_image = gridplot([[fig3, fig4], [fig1, fig2]], toolbar_location=None)
+                from bokeh.layouts import column
+                fig_image = column([fig3, fig1, fig2, fig4], sizing_mode='scale_width')
                 st.bokeh_chart(fig_image, use_container_width=True)
         else:
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
-                fig_image = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", plot_width=w, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
-                st.bokeh_chart(fig_image, use_container_width=False)
+                fig_image = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
+                st.bokeh_chart(fig_image, use_container_width=True)
 
         rad_plot = st.empty()
 
@@ -144,7 +189,7 @@ def main():
         from bokeh.plotting import figure
         tools = 'box_zoom,crosshair,hover,pan,reset,save,wheel_zoom'
         tooltips = [("r", "@x{0.0}Å"), ("val", "@y{0.0}"),]
-        fig_radprofile = figure(title="density radial profile", x_axis_label="r (Å)", y_axis_label="pixel value", frame_height=ny, tools=tools, tooltips=tooltips)
+        fig_radprofile = figure(title="density radial profile", x_axis_label="r (Å)", y_axis_label="pixel value", tools=tools, tooltips=tooltips, aspect_ratio=2)
         fig_radprofile.line(rad, radprofile, line_width=2, color='red')
         
         from bokeh.models import Span
@@ -152,12 +197,13 @@ def main():
         rmax_span = Span(location=rmax, dimension='height', line_color='green', line_dash='dashed', line_width=3)
         fig_radprofile.add_layout(rmin_span)
         fig_radprofile.add_layout(rmax_span)
+        fig_radprofile.yaxis.visible = False
         with rad_plot:
             st.bokeh_chart(fig_radprofile, use_container_width=True)
 
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
 
-    with col2:
+    with col3:
         da = st.number_input('Angular step size (°)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.1f")
         dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.1f")
         
@@ -220,12 +266,12 @@ def main():
                 npeaks_all = len(peaks)
                 npeaks = st.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
         
-    with col3:
+    with col4:
         if show_cylproj:
             st.text("") # workaround for a streamlit layout bug
             h, w = cylproj.shape
             tooltips = [("angle", "$x°"), ('z', '$yÅ'), ('cylproj', '@image')]
-            fig_cylproj = generate_bokeh_figure(cylproj, da, dz, title=f"Cylindrical Projection ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
+            fig_cylproj = generate_bokeh_figure(cylproj, da, dz, title=f"Cylindrical Projection ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
 
             if draw_cylproj_box:
                 if ang_min<ang_max:
@@ -241,7 +287,7 @@ def main():
             st.text("") # workaround for a streamlit layout bug
             h, w = acf.shape
             tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
-            fig_acf = generate_bokeh_figure(acf, da, dz, title=f"Auto-Correlation Function ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white")
+            fig_acf = generate_bokeh_figure(acf, da, dz, title=f"Auto-Correlation Function ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
             if show_peaks:
                 x = peaks[:npeaks, 0]
                 y = peaks[:npeaks, 1]
@@ -250,17 +296,16 @@ def main():
                 size = 30/(da+dz)
                 fig_acf.circle(x, y, size=size, line_width=2, line_color='yellow', fill_alpha=0)
 
-            st.text("") # workaround for a layout bug in streamlit 
             st.bokeh_chart(fig_acf, use_container_width=True)
             
-    with col4:
+    with col2:
         h, w = acf.shape
         h2 = 900   # final plot height
         w2 = int(round(w * h2/h))//2*2
         x_axis_label="twist (°)"
         y_axis_label="reise (Å)"
         tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
-        fig_indexing = generate_bokeh_figure(image=acf, dx=da, dy=dz, title="", title_location="above", plot_width=w2, plot_height=h2, x_axis_label=x_axis_label, y_axis_label=y_axis_label, tooltips=tooltips, show_axis=True, show_toolbar=True, crosshair_color="white")
+        fig_indexing = generate_bokeh_figure(image=acf, dx=da, dy=dz, title="", title_location="above", plot_width=None, plot_height=None, x_axis_label=x_axis_label, y_axis_label=y_axis_label, tooltips=tooltips, show_axis=True, show_toolbar=True, crosshair_color="white", aspect_ratio=w/h)
 
         # horizontal line along the equator
         from bokeh.models import LinearColorMapper, Arrow, VeeHead, Line
@@ -299,17 +344,17 @@ def main():
     else:
         st.experimental_set_query_params()
 
-def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, x_axis_label='x', y_axis_label='y', tooltips=None, show_axis=True, show_toolbar=True, crosshair_color="white"):
+def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, x_axis_label='x', y_axis_label='y', tooltips=None, show_axis=True, show_toolbar=True, crosshair_color="white", aspect_ratio=None):
     from bokeh.plotting import figure
     h, w = image.shape
-    w2 = plot_width if plot_width else w
-    h2 = plot_height if plot_height else h
+    if aspect_ratio is None and (plot_width and plot_height):
+        aspect_ratio = plot_width/plot_height
     tools = 'box_zoom,crosshair,pan,reset,save,wheel_zoom'
     fig = figure(title_location=title_location, 
-        frame_width=w2, frame_height=h2, 
+        frame_width=plot_width, frame_height=plot_height, 
         x_axis_label=x_axis_label, y_axis_label=y_axis_label,
         x_range=(-w//2*dx, (w//2-1)*dx), y_range=(-h//2*dy, (h//2-1)*dy), 
-        tools=tools)
+        tools=tools, aspect_ratio=aspect_ratio)
     fig.grid.visible = False
     if title:
         fig.title.text=title
