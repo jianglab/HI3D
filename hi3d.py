@@ -955,16 +955,13 @@ def get_3d_map_from_file(filename):
 @st.cache(persist=True, show_spinner=False)
 def setup_anonymous_usage_tracking():
     try:
-        import os, stat
-        index_file = os.path.dirname(st.__file__) + "/static/index.html"
-        os.chmod(index_file, stat.S_IRUSR|stat.S_IWUSR|stat.S_IROTH)
-        with open(index_file, "r+") as fp:
-            txt = fp.read()
-            if txt.find("gtag.js")==-1:
-                txt2 = txt.replace("<head>", '''<head><!-- Global site tag (gtag.js) - Google Analytics --><script async src="https://www.googletagmanager.com/gtag/js?id=G-8Z99BDVHTC"></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-8Z99BDVHTC');</script>''')
-                fp.seek(0)
-                fp.write(txt2)
-                fp.truncate()
+        import pathlib, stat
+        index_file = pathlib.Path(st.__file__).parent / "static/index.html"
+        index_file.chmod(stat.S_IRUSR|stat.S_IWUSR|stat.S_IRGRP|stat.S_IROTH)
+        txt = index_file.read_text()
+        if txt.find("gtag/js?")==-1:
+            txt = txt.replace("<head>", '''<head><script async src="https://www.googletagmanager.com/gtag/js?id=G-8Z99BDVHTC"></script><script>window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config', 'G-8Z99BDVHTC');</script>''')
+            index_file.write_text(txt)
     except:
         pass
 
