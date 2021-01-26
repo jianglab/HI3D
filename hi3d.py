@@ -61,9 +61,11 @@ def main():
         input_modes = {0:"upload", 1:"url", 2:"emd-xxxx"}
         value = int(query_params["input_mode"][0]) if "input_mode" in query_params else 1
         input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value)
+        is_emd = False
         if input_mode == 0: # "upload a mrc file":
             fileobj = st.file_uploader("Upload a mrc file", type=['mrc', 'map', 'map.gz'])
             if fileobj is not None:
+                is_emd = fileobj.name.find("emd-")!=-1
                 data, apix = get_3d_map_from_uploaded_file(fileobj)
                 nz, ny, nx = data.shape
                 if nz<32:
@@ -74,12 +76,14 @@ def main():
                 label = "Input a url of a 3D map:"
                 value = query_params["url"][0] if "url" in query_params else "ftp://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
                 url = st.text_input(label=label, value=value)
+                is_emd = url.find("emd-")!=-1
                 data, apix = get_3d_map_from_url(url.strip())
                 nz, ny, nx = data.shape
                 if nz<32:
                     st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
                     data = None
             elif input_mode == 2:   # "emd-xxxx":
+                is_emd = True
                 label = "Input an EMDB ID (emd-xxxx):"
                 value = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
                 emdid = st.text_input(label=label, value=value)
@@ -107,7 +111,7 @@ def main():
         container_image = st.beta_container()
 
         with st.beta_expander(label="Transform the map", expanded=False):
-            if input_mode == "emd-xxxx":
+            if is_emd:
                 rotx_auto, roty_auto, shiftx_auto, shifty_auto = 0., 0., 0., 0.
             else:
                 rotx_auto, shifty_auto = auto_vertical_center(np.sum(data, axis=2))
@@ -863,6 +867,8 @@ def auto_vertical_center(image):
     from scipy.optimize import fmin
     res = fmin(score_rotation_shift, x0=(angle, 0, 0), xtol=1e-2)
     angle = res[0]  # dy, dx are not robust enough
+    if angle>90: angle-=180
+    elif angle<-90: angle+=180
 
     # refine dx 
     image_work = rotate_shift_image(data=image_work, angle=angle)
