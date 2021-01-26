@@ -65,7 +65,7 @@ def main():
         if input_mode == 0: # "upload a mrc file":
             fileobj = st.file_uploader("Upload a mrc file", type=['mrc', 'map', 'map.gz'])
             if fileobj is not None:
-                is_emd = fileobj.name.find("emd-")!=-1
+                is_emd = fileobj.name.find("emd_")!=-1
                 data, apix = get_3d_map_from_uploaded_file(fileobj)
                 nz, ny, nx = data.shape
                 if nz<32:
@@ -76,7 +76,7 @@ def main():
                 label = "Input a url of a 3D map:"
                 value = query_params["url"][0] if "url" in query_params else "ftp://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
                 url = st.text_input(label=label, value=value)
-                is_emd = url.find("emd-")!=-1
+                is_emd = url.find("emd_")!=-1
                 data, apix = get_3d_map_from_url(url.strip())
                 nz, ny, nx = data.shape
                 if nz<32:
@@ -102,7 +102,7 @@ def main():
             return
 
         nz, ny, nx = data.shape
-        st.markdown(f'Map size: {nx}x{ny}x{nz}  Sampling: {apix:.4f} Å/voxel')
+        st.markdown(f'Map size: {nx}x{ny}x{nz}  Sampling: {apix:.4g} Å/voxel')
 
         section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
         mapping = {"X":(nx, 2), "Y":(ny, 1), "Z":(nz, 0)}
@@ -116,10 +116,10 @@ def main():
             else:
                 rotx_auto, shifty_auto = auto_vertical_center(np.sum(data, axis=2))
                 roty_auto, shiftx_auto = auto_vertical_center(np.sum(data, axis=1))
-            rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=rotx_auto, step=1.0)
-            roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=roty_auto, step=1.0)
-            shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=shiftx_auto*apix, step=1.0)
-            shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=shifty_auto*apix, step=1.0)
+            rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=rotx_auto, step=1.0, format="%.2g")
+            roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=roty_auto, step=1.0, format="%.2g")
+            shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=shiftx_auto*apix, step=1.0, format="%.2g")
+            shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=shifty_auto*apix, step=1.0, format="%.2g")
 
         image = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
         h, w = image.shape
@@ -184,8 +184,8 @@ def main():
             radprofile = compute_radial_profile(data)
             rad = np.arange(len(radprofile)) * apix
             rmin_auto, rmax_auto = estimate_radial_range(radprofile, thresh_ratio=0.1)
-            rmin = st.number_input('Minimal radius (Å)', value=rmin_auto*apix, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1f")
-            rmax = st.number_input('Maximal radius (Å)', value=rmax_auto*apix, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1f")
+            rmin = st.number_input('Minimal radius (Å)', value=rmin_auto*apix, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1g")
+            rmax = st.number_input('Maximal radius (Å)', value=rmax_auto*apix, min_value=0.0, max_value=nx//2*apix, step=1.0, format="%.1g")
             if rmax<=rmin:
                 st.warning(f"rmax(={rmax}) should be larger than rmin(={rmin})")
                 return
@@ -208,8 +208,8 @@ def main():
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
 
     with col3:
-        da = st.number_input('Angular step size (°)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.1f")
-        dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.1f")
+        da = st.number_input('Angular step size (°)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.2g")
+        dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%.2g")
         
         data = auto_masking(data)
         data = minimal_grids(data)
@@ -222,10 +222,10 @@ def main():
         show_cylproj = st.checkbox(label="Cylindrical projection", value=True)
         if show_cylproj:
             nz, na = cylproj.shape
-            ang_min = st.number_input('Minimal angle (°)', value=-180., min_value=-180.0, max_value=180., step=1.0, format="%.1f")
-            ang_max = st.number_input('Maximal angle (°)', value=180., min_value=-180.0, max_value=180., step=1.0, format="%.1f")
-            z_min = st.number_input('Minimal z (Å)', value=-nz//2*dz, min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%.1f")
-            z_max = st.number_input('Maximal z (Å)', value=nz//2*dz, min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%.1f")
+            ang_min = st.number_input('Minimal angle (°)', value=-180., min_value=-180.0, max_value=180., step=1.0, format="%.1g")
+            ang_max = st.number_input('Maximal angle (°)', value=180., min_value=-180.0, max_value=180., step=1.0, format="%.1g")
+            z_min = st.number_input('Minimal z (Å)', value=-nz//2*dz, min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%.1g")
+            z_max = st.number_input('Maximal z (Å)', value=nz//2*dz, min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%.1g")
             if z_max<=z_min:
                 st.warning(f"'Maximal z'(={z_max}) should be larger than 'Minimal z'(={z_min})")
                 return
@@ -323,7 +323,7 @@ def main():
             twist_tmp, rise_tmp, cn = trc_mean
             twist, rise = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_tmp, rise=rise_tmp, cn=cn)
 
-            fig_indexing.title.text = f"twist={twist:.2f}°  rise={rise:.2f}Å  csym=c{cn}"
+            fig_indexing.title.text = f"twist={twist:.2g}°  rise={rise:.2g}Å  csym=c{cn}"
             fig_indexing.title.align = "center"
             fig_indexing.title.text_font_size = "24px"
             fig_indexing.title.text_font_style = "normal"
@@ -333,8 +333,8 @@ def main():
             )
         else:
             msg = f"Failed to obtain consistent helical parameters using {npeaks} peaks. The two sollutions are:  \n"
-            msg+= f"Twist per subunit: {trc1[0]:.2f}&emsp;{trc2[0]:.2f} °  \n"
-            msg+= f"Rise &nbsp; per subunit: {trc1[1]:.2f}&emsp;&emsp;&emsp;{trc2[1]:.2f} Å  \n"
+            msg+= f"Twist per subunit: {trc1[0]:.2g}&emsp;{trc2[0]:.2g} °  \n"
+            msg+= f"Rise &nbsp; per subunit: {trc1[1]:.2g}&emsp;&emsp;&emsp;{trc2[1]:.2g} Å  \n"
             msg+= f"Csym &emsp; &emsp; &emsp; &emsp; : c{trc1[2]}&emsp;&emsp;&emsp;&emsp;c{trc2[2]}"
             st.warning(msg)
 
