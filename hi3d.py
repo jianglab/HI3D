@@ -386,18 +386,33 @@ def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_
         for ch in crosshair: ch.line_color = crosshair_color
     return fig
 
-@st.cache(persist=True, show_spinner=False)
+# do not cache - so that the random process is effective upon rerun
 def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
     if len(peaks) < 3:
         st.warning(f"WARNING: only {len(peaks)} peaks were found. At least 3 peaks are required")
         return (None, None, peaks)
 
+    consistent_solution_found = False
     nmax = len(peaks) if len(peaks)%2 else len(peaks)-1
     for n in range(nmax, 3-1, -2):
         trc1 = getHelicalLattice(peaks[:n])
         trc2 = getGenericLattice(peaks[:n])
         if consistent_twist_rise_cn_sets([trc1], [trc2], epsilon=1.0):
+            consistent_solution_found = True
             break
+    
+    if not consistent_solution_found: 
+        for _ in range(100):
+            from random import randint, sample
+            n = randint(5, len(peaks)//2)
+            random_choices = sorted(sample(range(n*2), k=n))
+            if 0 not in random_choices: random_choices = [0] + random_choices
+            peaks_random = peaks[random_choices]
+            trc1 = getHelicalLattice(peaks_random)
+            trc2 = getGenericLattice(peaks_random)
+            if consistent_twist_rise_cn_sets([trc1], [trc2], epsilon=1.0):
+                consistent_solution_found = True
+                break
     
     twist1, rise1, cn1 = trc1
     twist1, rise1 = refine_twist_rise(acf_image=(acf, da, dz), twist=twist1, rise=rise1, cn=cn1)
