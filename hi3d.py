@@ -102,7 +102,13 @@ def main():
             return
 
         nz, ny, nx = data.shape
-        st.markdown(f'Map size: {nx}x{ny}x{nz}  Sampling: {round(apix,4):g} Å/voxel')
+        st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
+
+        if np.std(data) == 0:
+            st.warning(f"The map is blank: min={data.min()} max={data.max()} mean={data.mean()} sigma={np.std(data)}. Please provide a valid 3D map")
+            st.stop()
+
+        data = normalize(data)
 
         section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
         mapping = {"X":(nx, 2), "Y":(ny, 1), "Z":(nz, 0)}
@@ -970,7 +976,7 @@ def get_3d_map_from_file(filename):
     with mrcfile.open(filename) as mrc:
         apix = mrc.voxel_size.x.item()
         is3d = mrc.is_volume() or mrc.is_volume_stack()
-        data = normalize(mrc.data)
+        data = mrc.data * 1.0
     return data, apix
 
 @st.cache(persist=True, show_spinner=False)
