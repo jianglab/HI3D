@@ -92,13 +92,13 @@ def main():
                     emd_id = emdid.lower().split("emd-")[-1]
                     if emd_id in emdb_ids:
                         data, apix = get_emdb_map(emd_id)
+                        st.markdown(f'[EMD-{emd_id}](https://www.ebi.ac.uk/pdbe/entry/emdb/EMD-{emd_id})')
                     else:
                         emd_id_bad = emd_id
                         emd_id = random.choice(emdb_ids)
                         st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')")
                 else:
                     st.warning("failed to obtained a list of helical structures in EMDB")
-                st.markdown(f'[EMD-{emd_id}](https://www.ebi.ac.uk/pdbe/entry/emdb/EMD-{emd_id})')
         if data is None:
             return
 
