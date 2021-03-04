@@ -59,7 +59,7 @@ def main():
         # make radio display horizontal
         st.markdown('<style>div.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
         input_modes = {0:"upload", 1:"url", 2:"emd-xxxx"}
-        value = int(query_params["input_mode"][0]) if "input_mode" in query_params else 1
+        value = int(query_params["input_mode"][0]) if "input_mode" in query_params else 2
         input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value)
         is_emd = False
         if input_mode == 0: # "upload a mrc file":
@@ -95,9 +95,10 @@ def main():
                     else:
                         emd_id_bad = emd_id
                         emd_id = random.choice(emdb_ids)
-                        st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id {emd_id})")
+                        st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')")
                 else:
                     st.warning("failed to obtained a list of helical structures in EMDB")
+                st.markdown(f'[EMD-{emd_id}](https://www.ebi.ac.uk/pdbe/entry/emdb/EMD-{emd_id})')
         if data is None:
             return
 
@@ -265,7 +266,10 @@ def main():
 
         peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, minmass=1.0)
         if peaks is None:
-            st.warning("Cannot find enough peaks from the auto-correlation image")
+            st.warning("No peak was found from the auto-correlation image")
+            return
+        elif len(peaks)<3:
+            st.warning(f"Only {len(peaks)} peaks were found. At least 3 peaks are required")
             return
         npeaks = len(peaks)
         
@@ -395,7 +399,7 @@ def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_
 # do not cache - so that the random process is effective upon rerun
 def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
     if len(peaks) < 3:
-        st.warning(f"WARNING: only {len(peaks)} peaks were found. At least 3 peaks are required")
+        #st.warning(f"WARNING: only {len(peaks)} peaks were found. At least 3 peaks are required")
         return (None, None, peaks)
 
     consistent_solution_found = False
@@ -487,7 +491,7 @@ def refine_twist_rise(acf_image, twist, rise, cn):
 @st.cache(persist=True, show_spinner=False, suppress_st_warning=True)
 def getHelicalLattice(peaks):
     if len(peaks) < 3:
-        st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
+        #st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
         return (0, 0, 1)
 
     x = peaks[:, 0]
@@ -501,10 +505,10 @@ def getHelicalLattice(peaks):
     if np.count_nonzero(nonzero)>0:
         rise = np.median(y[nonzero] / j[nonzero])
         if np.isnan(rise):
-            st.warning(f"failed to detect rise parameter. all {len(peaks)} peaks are in the same row?")
+            #st.warning(f"failed to detect rise parameter. all {len(peaks)} peaks are in the same row?")
             return (0, 0, 1)
     else:
-        st.warning(f"failed to detect rise parameter. all {len(peaks)} peaks are on the equator?")
+        #st.warning(f"failed to detect rise parameter. all {len(peaks)} peaks are on the equator?")
         return (0, 0, 1)
 
     cn = 1
@@ -540,10 +544,10 @@ def getHelicalLattice(peaks):
             if twist<0: twist+=360./cn
             elif twist>0: twist-=360./cn
         if np.isnan(twist):
-            st.warning(f"failed to detect twist parameter using {len(peaks)} peaks")
+            #st.warning(f"failed to detect twist parameter using {len(peaks)} peaks")
             return (0, 0, 1)
     else:
-        st.warning(f"failed to detect twist parameter using {len(peaks)} peaks")
+        #st.warning(f"failed to detect twist parameter using {len(peaks)} peaks")
         return (0, 0, 1)
 
     return (twist, rise, cn)
@@ -551,7 +555,7 @@ def getHelicalLattice(peaks):
 @st.cache(persist=True, show_spinner=False, suppress_st_warning=True)
 def getGenericLattice(peaks):
     if len(peaks) < 3:
-        st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
+        #st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
         return (0, 0, 1)
 
     from scipy.spatial import cKDTree as KDTree
