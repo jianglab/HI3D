@@ -414,8 +414,12 @@ def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
     if not consistent_solution_found: 
         for _ in range(100):
             from random import randint, sample
-            n = randint(5, len(peaks)//2)
-            random_choices = sorted(sample(range(n*2), k=n))
+            if len(peaks)//2 > 5:   # stronger peaks
+                n = randint(5, len(peaks)//2)
+                random_choices = sorted(sample(range(2*n), k=n))
+            else:
+                n = randint(3, len(peaks))
+                random_choices = sorted(sample(range(len(peaks)), k=n))
             if 0 not in random_choices: random_choices = [0] + random_choices
             peaks_random = peaks[random_choices]
             trc1 = getHelicalLattice(peaks_random)
@@ -724,7 +728,7 @@ def auto_correlation(data, high_pass_fraction=0):
     product = fft*np.conj(fft)
     if 0<high_pass_fraction<=1:
         nz, na = product.shape
-        Z, A = np.meshgrid(np.arange(-nz//2, nz//2, dtype=np.float), np.arange(-na//2, na//2, dtype=np.float), indexing='ij')
+        Z, A = np.meshgrid(np.arange(-nz//2, nz//2, dtype=float), np.arange(-na//2, na//2, dtype=float), indexing='ij')
         Z /= nz//2
         A /= na//2
         f2 = np.log(2)/(high_pass_fraction**2)
