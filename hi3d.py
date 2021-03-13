@@ -311,8 +311,7 @@ def main():
                 ys = np.sort(y)
                 xs_step = np.median(xs[1:]-xs[:-1])
                 ys_step = np.median(ys[1:]-ys[:-1])
-                print(xs_step, ys_step)
-                size = max(15, 100/(xs_step+ys_step))
+                size = min(15, 100/(xs_step+ys_step))
                 fig_acf.circle(x, y, size=size, line_width=2, line_color='yellow', fill_alpha=0)
 
             st.bokeh_chart(fig_acf, use_container_width=True)
