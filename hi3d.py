@@ -279,13 +279,15 @@ def main():
             if show_peaks:
                 npeaks_all = len(peaks)
                 npeaks = st.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
+
+        show_arrow = st.checkbox(label="Arrow", value=True)
         
     with col4:
         if show_cylproj:
             st.text("") # workaround for a streamlit layout bug
             h, w = cylproj.shape
             tooltips = [("angle", "$x°"), ('z', '$yÅ'), ('cylproj', '@image')]
-            fig_cylproj = generate_bokeh_figure(cylproj, da, dz, title=f"Cylindrical Projection ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
+            fig_cylproj = generate_bokeh_figure(cylproj, da, dz, title=f"Cylindrical Projection ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=True, crosshair_color="white", aspect_ratio=w/h)
 
             if draw_cylproj_box:
                 if ang_min<ang_max:
@@ -301,16 +303,23 @@ def main():
             st.text("") # workaround for a streamlit layout bug
             h, w = acf.shape
             tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
-            fig_acf = generate_bokeh_figure(acf, da, dz, title=f"Auto-Correlation Function ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
+            fig_acf = generate_bokeh_figure(acf, da, dz, title=f"Auto-Correlation Function ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=True, crosshair_color="white", aspect_ratio=w/h)
             if show_peaks:
                 x = peaks[:npeaks, 0]
                 y = peaks[:npeaks, 1]
                 xs = np.sort(x)
                 ys = np.sort(y)
-                size = 30/(da+dz)
+                xs_step = np.median(xs[1:]-xs[:-1])
+                ys_step = np.median(ys[1:]-ys[:-1])
+                print(xs_step, ys_step)
+                size = max(15, 100/(xs_step+ys_step))
                 fig_acf.circle(x, y, size=size, line_width=2, line_color='yellow', fill_alpha=0)
 
             st.bokeh_chart(fig_acf, use_container_width=True)
+
+        twist_empty = st.empty()
+        rise_empty = st.empty()
+        csym_empty = st.empty()
             
     with col2:
         h, w = acf.shape
@@ -323,7 +332,7 @@ def main():
 
         # horizontal line along the equator
         from bokeh.models import LinearColorMapper, Arrow, VeeHead, Line
-        fig_indexing.line([-w//2*dz, (w//2-1)*dz], [0, 0], line_width=2, line_color="yellow", line_dash="dashed")
+        fig_indexing.line([-w//2*da, (w//2-1)*da], [0, 0], line_width=2, line_color="yellow", line_dash="dashed")
         
         trc1, trc2 = fitHelicalLattice(peaks[:npeaks], acf, da=da, dz=dz)
         trc_mean = consistent_twist_rise_cn_sets([trc1], [trc2], epsilon=1.0)
@@ -331,22 +340,26 @@ def main():
 
         if success:
             twist_tmp, rise_tmp, cn = trc_mean
-            twist, rise = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_tmp, rise=rise_tmp, cn=cn)
-
-            fig_indexing.title.text = f"twist={round(twist,2):g}°  rise={round(rise,2):g}Å  csym=c{cn}"
-            fig_indexing.title.align = "center"
-            fig_indexing.title.text_font_size = "24px"
-            fig_indexing.title.text_font_style = "normal"
-
-            fig_indexing.add_layout(Arrow(x_start=0, y_start=0, x_end=twist, y_end=rise, line_color="yellow", line_width=4, 
-                end=VeeHead(line_color="yellow", fill_color="yellow", line_width=2))
-            )
+            twist_auto, rise_auto = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_tmp, rise=rise_tmp, cn=cn)
+            csym_auto = cn
         else:
+            twist_auto, rise_auto, csym_auto = trc1
             msg = f"Failed to obtain consistent helical parameters using {npeaks} peaks. The two sollutions are:  \n"
             msg+= f"Twist per subunit: {round(trc1[0],2):g}&emsp;{round(trc2[0],2):g} °  \n"
             msg+= f"Rise &nbsp; per subunit: {round(trc1[1],2):g}&emsp;&emsp;&emsp;{round(trc2[1]):g} Å  \n"
             msg+= f"Csym &emsp; &emsp; &emsp; &emsp; : c{trc1[2]}&emsp;&emsp;&emsp;&emsp;c{trc2[2]}"
             st.warning(msg)
+
+        twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=round(twist_auto,2), step=0.01, format="%g")
+        rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=round(rise_auto,2), step=0.01, format="%g")
+        csym = csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=csym_auto, step=1, format="%d")
+        fig_indexing.title.text = f"twist={round(twist,2):g}°  rise={round(rise,2):g}Å  csym=c{csym}"
+        fig_indexing.title.align = "center"
+        fig_indexing.title.text_font_size = "24px"
+        fig_indexing.title.text_font_style = "normal"
+
+        if show_arrow:
+            fig_indexing.add_layout(Arrow(x_start=0, y_start=0, x_end=twist, y_end=rise, line_color="yellow", line_width=4, end=VeeHead(line_color="yellow", fill_color="yellow", line_width=2)))
 
         st.text("") # workaround for a layout bug in streamlit 
         st.bokeh_chart(fig_indexing, use_container_width=True)
