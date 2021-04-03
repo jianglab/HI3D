@@ -51,6 +51,8 @@ def main():
 
     col1, col2, col3, col4 = st.beta_columns((1.0, 3.2, 0.6, 1.15))
 
+    msg_empty = col2.empty()
+
     with col1:
         with st.beta_expander(label="README", expanded=False):
             st.write("This Web app considers a biological helical structure as a 2D crystal that has been rolled up into a cylindrical tube while preserving the original lattice. The indexing process is thus to computationally reverse this process: the 3D helical structure is first unrolled into a 2D image using cylindrical projection, and then the 2D lattice parameters are automatically identified from which the helical parameters (twist, rise, and cyclic symmetry) are derived. The auto-correlation function of the cylindrical projection is used to provide a lattice with sharper peaks. Two distinct lattice identification methods, one for generical 2D lattice and one specifically for helical lattice, are used to find a consistent solution.  \n  \nTips: play with the rmin/rmax, #peaks, axial step size parameters if consistent helical parameters cannot be obtained with the default parameters. Use a larger axial step size (for example 2Å) for a structure with large rise.\n  \nTips: maximize the browser window or zoom-out the browser view (using ctrl- or ⌘- key combinations) if the displayed images overlap each other.")
@@ -263,24 +265,12 @@ def main():
 
         cylproj_square = make_square_shape(cylproj_work)
         acf = auto_correlation(cylproj_square, high_pass_fraction=1./cylproj_square.shape[0])
-
-        peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, minmass=1.0)
-        if peaks is None:
-            st.warning("No peak was found from the auto-correlation image")
-            return
-        elif len(peaks)<3:
-            st.warning(f"Only {len(peaks)} peaks were found. At least 3 peaks are required")
-            return
-        npeaks = len(peaks)
-        
         show_acf = st.checkbox(label="Auto-correlation function", value=True)
         if show_acf:
-            show_peaks = st.checkbox(label="Peaks", value=True)
-            if show_peaks:
-                npeaks_all = len(peaks)
-                npeaks = st.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
+            show_peaks_empty = st.empty()
 
-        show_arrow = st.checkbox(label="Arrow", value=True)
+        npeaks_empty = st.empty()
+        show_arrow_empty = st.empty()
         
     with col4:
         if show_cylproj:
@@ -304,7 +294,23 @@ def main():
             h, w = acf.shape
             tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
             fig_acf = generate_bokeh_figure(acf, da, dz, title=f"Auto-Correlation Function ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=True, crosshair_color="white", aspect_ratio=w/h)
+
+            peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, minmass=1.0)
+            if peaks is None or len(peaks)<3:
+                st.bokeh_chart(fig_acf, use_container_width=True)
+                if peaks is None:
+                    msg_empty.warning("No peak was found from the auto-correlation image")
+                    return
+                elif len(peaks)<3:
+                    msg_empty.warning(f"Only {len(peaks)} peaks were found. At least 3 peaks are required")
+                    return
+
+            show_peaks = show_peaks_empty.checkbox(label="Peaks", value=True)
             if show_peaks:
+                npeaks_all = len(peaks)
+                npeaks = npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
+                show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True)
+
                 x = peaks[:npeaks, 0]
                 y = peaks[:npeaks, 1]
                 xs = np.sort(x)
@@ -347,7 +353,7 @@ def main():
             msg+= f"Twist per subunit: {round(trc1[0],2):g}&emsp;{round(trc2[0],2):g} °  \n"
             msg+= f"Rise &nbsp; per subunit: {round(trc1[1],2):g}&emsp;&emsp;&emsp;{round(trc2[1]):g} Å  \n"
             msg+= f"Csym &emsp; &emsp; &emsp; &emsp; : c{trc1[2]}&emsp;&emsp;&emsp;&emsp;c{trc2[2]}"
-            st.warning(msg)
+            msg_empty.warning(msg)
 
         twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=round(twist_auto,2), step=0.01, format="%g")
         rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=round(rise_auto,2), step=0.01, format="%g")
