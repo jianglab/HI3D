@@ -220,6 +220,8 @@ def main():
     with col3:
         da = st.number_input('Angular step size (°)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the azimuthal angle step size for the computation of the cylindric projection")
         dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the axial step size for the computation of the cylindric projection. Use a smaller step size (such as 0.2) for a helical structure with small rise")
+
+        npeaks_empty = st.empty()
         
         data = auto_masking(data)
         data = minimal_grids(data)
@@ -270,7 +272,11 @@ def main():
         if show_acf:
             show_peaks_empty = st.empty()
 
-        npeaks_empty = st.empty()
+        peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, minmass=1.0)
+        if peaks is not None:
+            npeaks_all = len(peaks)
+            npeaks = npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)")
+
         show_arrow_empty = st.empty()
         
     with col4:
@@ -295,37 +301,31 @@ def main():
             tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
             fig_acf = generate_bokeh_figure(acf, da, dz, title=f"Auto-Correlation Function ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=True, crosshair_color="white", aspect_ratio=w/h)
 
-            peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, minmass=1.0)
-            if peaks is None or len(peaks)<3:
-                st.bokeh_chart(fig_acf, use_container_width=True)
-                if peaks is None:
-                    msg_empty.warning("No peak was found from the auto-correlation image")
-                    return
-                elif len(peaks)<3:
-                    msg_empty.warning(f"Only {len(peaks)} peaks were found. At least 3 peaks are required")
-                    return
-
-            show_peaks = show_peaks_empty.checkbox(label="Peaks", value=True, help=f"Mark the {len(peaks)} peaks detected in the auto-correlation function with yellow circles")
-            if show_peaks:
-                npeaks_all = len(peaks)
-                npeaks = npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)")
-                show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True, help="Show an arrow in the central panel from the center to the first lattice point corresponding to the helical twist/rise")
-
-                x = peaks[:npeaks, 0]
-                y = peaks[:npeaks, 1]
-                xs = np.sort(x)
-                ys = np.sort(y)
-                xs_step = np.median(xs[1:]-xs[:-1])
-                ys_step = np.median(ys[1:]-ys[:-1])
-                size = min(15, 100/(xs_step+ys_step))
-                fig_acf.circle(x, y, size=size, line_width=2, line_color='yellow', fill_alpha=0)
+            if peaks is not None:
+                show_peaks = show_peaks_empty.checkbox(label="Peaks", value=True, help=f"Mark the {len(peaks)} peaks detected in the auto-correlation function with yellow circles")
+                if show_peaks:
+                    x = peaks[:npeaks, 0]
+                    y = peaks[:npeaks, 1]
+                    xs = np.sort(x)
+                    ys = np.sort(y)
+                    xs_step = np.median(xs[1:]-xs[:-1])
+                    ys_step = np.median(ys[1:]-ys[:-1])
+                    size = min(15, 100/(xs_step+ys_step))
+                    fig_acf.circle(x, y, size=size, line_width=2, line_color='yellow', fill_alpha=0)
 
             st.bokeh_chart(fig_acf, use_container_width=True)
+
+        if peaks is None:
+            msg_empty.warning("No peak was found from the auto-correlation image")
+            return
+        elif len(peaks)<3:
+            msg_empty.warning(f"Only {len(peaks)} peaks were found. At least 3 peaks are required")
+            return
 
         twist_empty = st.empty()
         rise_empty = st.empty()
         csym_empty = st.empty()
-            
+
     with col2:
         h, w = acf.shape
         h2 = 900   # final plot height
@@ -363,6 +363,7 @@ def main():
         fig_indexing.title.text_font_size = "24px"
         fig_indexing.title.text_font_style = "normal"
 
+        show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True, help="Show an arrow in the central panel from the center to the first lattice point corresponding to the helical twist/rise")
         if show_arrow:
             fig_indexing.add_layout(Arrow(x_start=0, y_start=0, x_end=twist, y_end=rise, line_color="yellow", line_width=4, end=VeeHead(line_color="yellow", fill_color="yellow", line_width=2)))
 
