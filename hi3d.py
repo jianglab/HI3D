@@ -62,10 +62,10 @@ def main():
         st.markdown('<style>div.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
         input_modes = {0:"upload", 1:"url", 2:"emd-xxxx"}
         value = int(query_params["input_mode"][0]) if "input_mode" in query_params else 2
-        input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value)
+        input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value, help="Only maps in MRC (*\*.mrc*) or CCP4 (*\*.map*) format are supported. Compressed maps (*\*.gz*) will be automatically decompressed")
         is_emd = False
-        if input_mode == 0: # "upload a mrc file":
-            fileobj = st.file_uploader("Upload a mrc file", type=['mrc', 'map', 'map.gz'])
+        if input_mode == 0: # "upload a MRC file":
+            fileobj = st.file_uploader("Upload a map in MRC or CCP4 format", type=['mrc', 'map', 'map.gz'])
             if fileobj is not None:
                 is_emd = fileobj.name.find("emd_")!=-1
                 data, apix = get_3d_map_from_uploaded_file(fileobj)
@@ -75,9 +75,10 @@ def main():
                     data = None
         else:
             if input_mode == 1: # "url":
-                label = "Input a url of a 3D map:"
-                value = query_params["url"][0] if "url" in query_params else "ftp://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
-                url = st.text_input(label=label, value=value)
+                url_default = "http://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
+                label = "Input the url of a 3D map:"
+                value = query_params["url"][0] if "url" in query_params else url_default
+                url = st.text_input(label=label, value=value, help="An online url (http:// or ftp://) or a local file path (/path/to/your/structure.mrc)")
                 is_emd = url.find("emd_")!=-1
                 data, apix = get_3d_map_from_url(url.strip())
                 nz, ny, nx = data.shape
@@ -217,8 +218,8 @@ def main():
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
 
     with col3:
-        da = st.number_input('Angular step size (°)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%g")
-        dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%g")
+        da = st.number_input('Angular step size (°)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the azimuthal angle step size for the computation of the cylindric projection")
+        dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the axial step size for the computation of the cylindric projection. Use a smaller step size (such as 0.2) for a helical structure with small rise")
         
         data = auto_masking(data)
         data = minimal_grids(data)
@@ -228,13 +229,13 @@ def main():
         draw_cylproj_box = False
 
         st.subheader("Display:")
-        show_cylproj = st.checkbox(label="Cylindrical projection", value=True)
+        show_cylproj = st.checkbox(label="Cylindrical projection", value=True, help="Display the cylindric projection")
         if show_cylproj:
             nz, na = cylproj.shape
-            ang_min = st.number_input('Minimal angle (°)', value=-180., min_value=-180.0, max_value=180., step=1.0, format="%g")
-            ang_max = st.number_input('Maximal angle (°)', value=180., min_value=-180.0, max_value=180., step=1.0, format="%g")
-            z_min = st.number_input('Minimal z (Å)', value=round(-nz//2*dz,1), min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%g")
-            z_max = st.number_input('Maximal z (Å)', value=round(nz//2*dz,1), min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%g")
+            ang_min = st.number_input('Minimal angle (°)', value=-180., min_value=-180.0, max_value=180., step=1.0, format="%g", help="Set the minimal azimuthal angle of the cylindric projection to be included to compute the auto-correlation function")
+            ang_max = st.number_input('Maximal angle (°)', value=180., min_value=-180.0, max_value=180., step=1.0, format="%g", help="Set the maximal azimuthal angle of the cylindric projection to be included to compute the auto-correlation function. If this angle is smaller than *Minimal angle*, the angular range will be *Minimal angle* to 360 and -360 to *Maximal angle*")
+            z_min = st.number_input('Minimal z (Å)', value=round(-nz//2*dz,1), min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%g", help="Set the minimal axial section of the cylindric projection to be included to compute the auto-correlation function")
+            z_max = st.number_input('Maximal z (Å)', value=round(nz//2*dz,1), min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%g", help="Set the maximal axial section of the cylindric projection to be included to compute the auto-correlation function")
             if z_max<=z_min:
                 st.warning(f"'Maximal z'(={z_max}) should be larger than 'Minimal z'(={z_min})")
                 return
@@ -265,7 +266,7 @@ def main():
 
         cylproj_square = make_square_shape(cylproj_work)
         acf = auto_correlation(cylproj_square, high_pass_fraction=1./cylproj_square.shape[0])
-        show_acf = st.checkbox(label="Auto-correlation function", value=True)
+        show_acf = st.checkbox(label="Auto-correlation function", value=True, help="Display the auto-correlation function")
         if show_acf:
             show_peaks_empty = st.empty()
 
@@ -274,7 +275,6 @@ def main():
         
     with col4:
         if show_cylproj:
-            st.text("") # workaround for a streamlit layout bug
             h, w = cylproj.shape
             tooltips = [("angle", "$x°"), ('z', '$yÅ'), ('cylproj', '@image')]
             fig_cylproj = generate_bokeh_figure(cylproj, da, dz, title=f"Cylindrical Projection ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=True, crosshair_color="white", aspect_ratio=w/h)
@@ -305,11 +305,11 @@ def main():
                     msg_empty.warning(f"Only {len(peaks)} peaks were found. At least 3 peaks are required")
                     return
 
-            show_peaks = show_peaks_empty.checkbox(label="Peaks", value=True)
+            show_peaks = show_peaks_empty.checkbox(label="Peaks", value=True, help=f"Mark the {len(peaks)} peaks detected in the auto-correlation function with yellow circles")
             if show_peaks:
                 npeaks_all = len(peaks)
-                npeaks = npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2)
-                show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True)
+                npeaks = npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)")
+                show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True, help="Show an arrow in the central panel from the center to the first lattice point corresponding to the helical twist/rise")
 
                 x = peaks[:npeaks, 0]
                 y = peaks[:npeaks, 1]
@@ -355,9 +355,9 @@ def main():
             msg+= f"Csym &emsp; &emsp; &emsp; &emsp; : c{trc1[2]}&emsp;&emsp;&emsp;&emsp;c{trc2[2]}"
             msg_empty.warning(msg)
 
-        twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=round(twist_auto,2), step=0.01, format="%g")
-        rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=round(rise_auto,2), step=0.01, format="%g")
-        csym = csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=csym_auto, step=1, format="%d")
+        twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=round(twist_auto,2), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function")
+        rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=round(rise_auto,2), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function")
+        csym = csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=csym_auto, step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function")
         fig_indexing.title.text = f"twist={round(twist,2):g}°  rise={round(rise,2):g}Å  csym=c{csym}"
         fig_indexing.title.align = "center"
         fig_indexing.title.text_font_size = "24px"
@@ -986,7 +986,7 @@ def get_emdb_ids():
 @st.cache(persist=True, show_spinner=False)
 def get_emdb_map(emdid):
     emdid_number = emdid.lower().split("emd-")[-1]
-    url = f"ftp://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-{emdid_number}/map/emd_{emdid_number}.map.gz"
+    url = f"http://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-{emdid_number}/map/emd_{emdid_number}.map.gz"
     return get_3d_map_from_url(url)
 
 @st.cache(persist=True, show_spinner=False)
