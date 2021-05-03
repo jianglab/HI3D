@@ -55,12 +55,12 @@ def main():
 
     with col1:
         with st.beta_expander(label="README", expanded=False):
-            st.write("This Web app considers a biological helical structure as a 2D crystal that has been rolled up into a cylindrical tube while preserving the original lattice. The indexing process is thus to computationally reverse this process: the 3D helical structure is first unrolled into a 2D image using cylindrical projection, and then the 2D lattice parameters are automatically identified from which the helical parameters (twist, rise, and cyclic symmetry) are derived. The auto-correlation function of the cylindrical projection is used to provide a lattice with sharper peaks. Two distinct lattice identification methods, one for generical 2D lattice and one specifically for helical lattice, are used to find a consistent solution.  \n  \nTips: play with the rmin/rmax, #peaks, axial step size parameters if consistent helical parameters cannot be obtained with the default parameters. Use a larger axial step size (for example 2Å) for a structure with large rise.\n  \nTips: maximize the browser window or zoom-out the browser view (using ctrl- or ⌘- key combinations) if the displayed images overlap each other.")
+            st.write("This Web app considers a biological helical structure as a 2D crystal that has been rolled up into a cylindrical tube while preserving the original lattice. The indexing process is thus to computationally reverse this process: the 3D helical structure is first unrolled into a 2D image using cylindrical projection, and then the 2D lattice parameters are automatically identified from which the helical parameters (twist, rise, and cyclic symmetry) are derived. The auto-correlation function (ACF) of the cylindrical projection is used to provide a lattice with sharper peaks. Two distinct lattice identification methods, one for generical 2D lattice and one specifically for helical lattice, are used to find a consistent solution.  \n  \nTips: play with the rmin/rmax, #peaks, axial step size parameters if consistent helical parameters cannot be obtained with the default parameters. Use a larger axial step size (for example 2Å) for a structure with large rise.\n  \nTips: maximize the browser window or zoom-out the browser view (using ctrl- or ⌘- key combinations) if the displayed images overlap each other.")
         
         data = None
         # make radio display horizontal
         st.markdown('<style>div.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
-        input_modes = {0:"upload", 1:"url", 2:"emd-xxxx"}
+        input_modes = {0:"upload", 1:"url", 2:"emd-xxxxx"}
         value = int(query_params["input_mode"][0]) if "input_mode" in query_params else 2
         input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value, help="Only maps in MRC (*\*.mrc*) or CCP4 (*\*.map*) format are supported. Compressed maps (*\*.gz*) will be automatically decompressed")
         is_emd = False
@@ -85,9 +85,9 @@ def main():
                 if nz<32:
                     st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
                     data = None
-            elif input_mode == 2:   # "emd-xxxx":
+            elif input_mode == 2:   # "emd-xxxxx":
                 is_emd = True
-                label = "Input an EMDB ID (emd-xxxx):"
+                label = "Input an EMDB ID (emd-xxxxx):"
                 value = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
                 emdid = st.text_input(label=label, value=value)
                 emdb_ids = get_emdb_ids()
@@ -268,7 +268,7 @@ def main():
 
         cylproj_square = make_square_shape(cylproj_work)
         acf = auto_correlation(cylproj_square, high_pass_fraction=1./cylproj_square.shape[0])
-        show_acf = st.checkbox(label="Auto-correlation function", value=True, help="Display the auto-correlation function")
+        show_acf = st.checkbox(label="ACF", value=True, help="Display the auto-correlation function (ACF)")
         if show_acf:
             show_peaks_empty = st.empty()
 
@@ -299,7 +299,7 @@ def main():
             st.text("") # workaround for a streamlit layout bug
             h, w = acf.shape
             tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
-            fig_acf = generate_bokeh_figure(acf, da, dz, title=f"Auto-Correlation Function ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=True, crosshair_color="white", aspect_ratio=w/h)
+            fig_acf = generate_bokeh_figure(acf, da, dz, title=f"Auto-Correlation ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=True, crosshair_color="white", aspect_ratio=w/h)
 
             if peaks is not None:
                 show_peaks = show_peaks_empty.checkbox(label="Peaks", value=True, help=f"Mark the {len(peaks)} peaks detected in the auto-correlation function with yellow circles")
