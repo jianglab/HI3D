@@ -92,8 +92,8 @@ def main():
             if input_mode == 2:   # "emd-xxxxx":
                 label = "Input an EMDB ID (emd-xxxxx):"
                 value = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
-                emdid = st.text_input(label=label, value=value)
-                emd_id = emdid.lower().split("emd-")[-1]
+                emd_id = st.text_input(label=label, value=value)
+                emd_id = emd_id.lower().split("emd-")[-1]
                 if emd_id not in emdb_ids:
                     emd_id_bad = emd_id
                     import random
@@ -101,9 +101,14 @@ def main():
                     st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')")
                     return
             elif input_mode == 3:   # "random":
-                st.button(label="Change EMDB ID")
                 import random
-                emd_id = random.choice(emdb_ids)
+                button_clicked = st.button(label="Change EMDB ID", help="Randomly select another helical structure in EMDB")
+                if button_clicked or "emdid" not in query_params:
+                    emd_id = random.choice(emdb_ids)
+                else:
+                    emd_id = random.choice(emdb_ids)
+                    try: emd_id = query_params["emdid"][0].lower().split("emd-")[-1]
+                    except: pass
             data, apix = get_emdb_map(emd_id)
             if data is None:
                 st.warning(f"Failed to download [EMD-{emd_id}](https://www.ebi.ac.uk/pdbe/entry/emdb/EMD-{emd_id})")
@@ -379,10 +384,10 @@ def main():
         st.text("") # workaround for a layout bug in streamlit 
         st.bokeh_chart(fig_indexing, use_container_width=True)
 
-    if input_mode == 2:
-        st.experimental_set_query_params(input_mode=2, emdid=emdid)
+    if input_mode in [2, 3]:
+        st.experimental_set_query_params(input_mode=input_mode, emdid=emd_id)
     elif input_mode == 1:
-        st.experimental_set_query_params(input_mode=1, url=url)
+        st.experimental_set_query_params(input_mode=input_mode, url=url)
     else:
         st.experimental_set_query_params()
 
