@@ -60,7 +60,7 @@ def main():
         data = None
         # make radio display horizontal
         st.markdown('<style>div.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
-        input_modes = {0:"upload", 1:"url", 2:"emd-xxxxx"}
+        input_modes = {0:"upload", 1:"url", 2:"emd-xxxxx", 3:"random"}
         value = int(query_params["input_mode"][0]) if "input_mode" in query_params else 2
         input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value, help="Only maps in MRC (*\*.mrc*) or CCP4 (*\*.map*) format are supported. Compressed maps (*\*.gz*) will be automatically decompressed")
         is_emd = False
@@ -73,35 +73,44 @@ def main():
                 if nz<32:
                     st.warning(f"The uploaded file {fileobj.name} ({nx}x{ny}x{nz}) is not a 3D map")
                     data = None
-        else:
-            if input_mode == 1: # "url":
-                url_default = "http://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
-                label = "Input the url of a 3D map:"
-                value = query_params["url"][0] if "url" in query_params else url_default
-                url = st.text_input(label=label, value=value, help="An online url (http:// or ftp://) or a local file path (/path/to/your/structure.mrc)")
-                is_emd = url.find("emd_")!=-1
-                data, apix = get_3d_map_from_url(url.strip())
-                nz, ny, nx = data.shape
-                if nz<32:
-                    st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
-                    data = None
-            elif input_mode == 2:   # "emd-xxxxx":
-                is_emd = True
+        elif input_mode == 1: # "url":
+            url_default = "http://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
+            label = "Input the url of a 3D map:"
+            value = query_params["url"][0] if "url" in query_params else url_default
+            url = st.text_input(label=label, value=value, help="An online url (http:// or ftp://) or a local file path (/path/to/your/structure.mrc)")
+            is_emd = url.find("emd_")!=-1
+            data, apix = get_3d_map_from_url(url.strip())
+            nz, ny, nx = data.shape
+            if nz<32:
+                st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
+                data = None
+        elif input_mode in [2, 3]:            
+            emdb_ids = get_emdb_ids()
+            if not emdb_ids:
+                st.warning("failed to obtained a list of helical structures in EMDB")
+                return
+            if input_mode == 2:   # "emd-xxxxx":
                 label = "Input an EMDB ID (emd-xxxxx):"
                 value = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
                 emdid = st.text_input(label=label, value=value)
-                emdb_ids = get_emdb_ids()
-                if emdb_ids:
-                    emd_id = emdid.lower().split("emd-")[-1]
-                    if emd_id in emdb_ids:
-                        data, apix = get_emdb_map(emd_id)
-                        st.markdown(f'[EMD-{emd_id}](https://www.ebi.ac.uk/pdbe/entry/emdb/EMD-{emd_id})')
-                    else:
-                        emd_id_bad = emd_id
-                        emd_id = random.choice(emdb_ids)
-                        st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')")
-                else:
-                    st.warning("failed to obtained a list of helical structures in EMDB")
+                emd_id = emdid.lower().split("emd-")[-1]
+                if emd_id not in emdb_ids:
+                    emd_id_bad = emd_id
+                    import random
+                    emd_id = random.choice(emdb_ids)
+                    st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')")
+                    return
+            elif input_mode == 3:   # "random":
+                st.button(label="Change EMDB ID")
+                import random
+                emd_id = random.choice(emdb_ids)
+            data, apix = get_emdb_map(emd_id)
+            if data is None:
+                st.warning(f"Failed to download [EMD-{emd_id}](https://www.ebi.ac.uk/pdbe/entry/emdb/EMD-{emd_id})")
+                return
+            st.markdown(f'[EMD-{emd_id}](https://www.ebi.ac.uk/pdbe/entry/emdb/EMD-{emd_id})')
+            is_emd = True
+
         if data is None:
             return
 
