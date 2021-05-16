@@ -231,6 +231,14 @@ def main():
 
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
 
+        hide_streamlit_style = """
+        <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        </style>
+        """
+        st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
+
     with col3:
         da = st.number_input('Angular step size (°)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the azimuthal angle step size for the computation of the cylindric projection")
         dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the axial step size for the computation of the cylindric projection. Use a smaller step size (such as 0.2) for a helical structure with small rise")
@@ -380,6 +388,13 @@ def main():
         show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True, help="Show an arrow in the central panel from the center to the first lattice point corresponding to the helical twist/rise")
         if show_arrow:
             fig_indexing.add_layout(Arrow(x_start=0, y_start=0, x_end=twist, y_end=rise, line_color="yellow", line_width=4, end=VeeHead(line_color="yellow", fill_color="yellow", line_width=2)))
+
+        from bokeh.models import CustomJS
+        from bokeh.events import MouseEnter
+        title_js = CustomJS(args=dict(title=title), code="""
+            document.title=title
+        """)
+        fig_indexing.js_on_event(MouseEnter, title_js)
 
         st.text("") # workaround for a layout bug in streamlit 
         st.bokeh_chart(fig_indexing, use_container_width=True)
