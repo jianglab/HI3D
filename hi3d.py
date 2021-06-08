@@ -229,6 +229,8 @@ def main():
         with rad_plot:
             st.bokeh_chart(fig_radprofile, use_container_width=True)
 
+        set_url = st.button("Get link", help="Click to make the URL a sharable link")
+
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
 
         hide_streamlit_style = """
@@ -399,10 +401,13 @@ def main():
         st.text("") # workaround for a layout bug in streamlit 
         st.bokeh_chart(fig_indexing, use_container_width=True)
 
-    if input_mode in [2, 3]:
-        st.experimental_set_query_params(input_mode=input_mode, emdid=emd_id)
-    elif input_mode == 1:
-        st.experimental_set_query_params(input_mode=input_mode, url=url)
+    if set_url:
+        if input_mode in [2, 3]:
+            st.experimental_set_query_params(input_mode=input_mode, emdid=f"emd-{emd_id}")
+        elif input_mode == 1:
+            st.experimental_set_query_params(input_mode=input_mode, url=url)
+        else:
+            st.experimental_set_query_params()
     else:
         st.experimental_set_query_params()
 
