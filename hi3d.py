@@ -111,9 +111,9 @@ def main():
                     except: pass
             data, apix = get_emdb_map(emd_id)
             if data is None:
-                st.warning(f"Failed to download [EMD-{emd_id}](https://www.ebi.ac.uk/pdbe/entry/emdb/EMD-{emd_id})")
+                st.warning(f"Failed to download [EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})")
                 return
-            st.markdown(f'[EMD-{emd_id}](https://www.ebi.ac.uk/pdbe/entry/emdb/EMD-{emd_id})')
+            st.markdown(f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})')
             is_emd = True
 
         if data is None:
@@ -299,7 +299,7 @@ def main():
         peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, minmass=1.0)
         if peaks is not None:
             npeaks_all = len(peaks)
-            npeaks = npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)")
+            npeaks = int(npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)"))
 
         show_arrow_empty = st.empty()
         
@@ -379,13 +379,14 @@ def main():
             msg+= f"Csym &emsp; &emsp; &emsp; &emsp; : c{trc1[2]}&emsp;&emsp;&emsp;&emsp;c{trc2[2]}"
             msg_empty.warning(msg)
 
-        twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=round(twist_auto,2), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function")
-        rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=round(rise_auto,2), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function")
-        csym = csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=csym_auto, step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function")
+        twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function")
+        rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=float(round(rise_auto,2)), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function")
+        csym = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=csym_auto, step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function"))
         fig_indexing.title.text = f"twist={round(twist,2):g}°  rise={round(rise,2):g}Å  csym=c{csym}"
         fig_indexing.title.align = "center"
         fig_indexing.title.text_font_size = "24px"
         fig_indexing.title.text_font_style = "normal"
+        fig_indexing.hover[0].attachment = "vertical"
 
         show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True, help="Show an arrow in the central panel from the center to the first lattice point corresponding to the helical twist/rise")
         if show_arrow:
@@ -760,12 +761,15 @@ def find_peaks(acf, da, dz, peak_diameter=0.025, minmass=1.0, max_peaks=71):
     from trackpy import locate
     # diameter: fraction of the maximal dimension of the image (acf)
     diameter = int(max(acf.shape)*peak_diameter)//2*2+1
+    acf2 = np.hstack((acf, acf, acf))   # to handle peaks at left/right edges
     while True:
-        f = locate(acf, diameter=diameter, minmass=minmass)
-        if len(f)>3: break
+        f = locate(acf2, diameter=diameter, minmass=minmass)
+        if len(f)>9: break
         minmass *= 0.9
         if minmass<0.1:
             return None
+    f.loc[:, 'x'] -= acf.shape[1]
+    f = f.loc[ (f['x'] >= 0) & (f['x'] < acf.shape[1]) ]
     f = f.sort_values(["mass"], ascending=False)[:max_peaks]
     peaks = np.zeros((len(f), 2), dtype=float)
     peaks[:, 0] = f['x'].values - acf.shape[1]//2    # pixel
