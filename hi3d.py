@@ -135,11 +135,12 @@ def main():
         container_image = st.beta_container()
 
         with st.beta_expander(label="Transform the map", expanded=False):
-            if is_emd:
-                rotx_auto, roty_auto, shiftx_auto, shifty_auto = 0., 0., 0., 0.
-            else:
+            do_auto_transform = st.checkbox("Center & verticalize the map", value=(not is_emd))
+            if do_auto_transform:
                 rotx_auto, shifty_auto = auto_vertical_center(np.sum(data, axis=2))
                 roty_auto, shiftx_auto = auto_vertical_center(np.sum(data, axis=1))
+            else:
+                rotx_auto, roty_auto, shiftx_auto, shifty_auto = 0., 0., 0., 0.
             rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=round(rotx_auto,2), step=1.0, format="%g")
             roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=round(roty_auto,2), step=1.0, format="%g")
             shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(shiftx_auto*apix,2), step=1.0, format="%g")
