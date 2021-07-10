@@ -79,7 +79,8 @@ def main():
             value = query_params["url"][0] if "url" in query_params else url_default
             url = st.text_input(label=label, value=value, help="An online url (http:// or ftp://) or a local file path (/path/to/your/structure.mrc)")
             is_emd = url.find("emd_")!=-1
-            data, apix = get_3d_map_from_url(url.strip())
+            with st.spinner(f'Downloading {url.strip()}'):
+                data, apix = get_3d_map_from_url(url.strip())
             nz, ny, nx = data.shape
             if nz<32:
                 st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
@@ -109,7 +110,8 @@ def main():
                     emd_id = random.choice(emdb_ids)
                     try: emd_id = query_params["emdid"][0].lower().split("emd-")[-1]
                     except: pass
-            data, apix = get_emdb_map(emd_id)
+            with st.spinner(f'Downloading EMD-{emd_id}'):
+                data, apix = get_emdb_map(emd_id)
             if data is None:
                 st.warning(f"Failed to download [EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})")
                 return
@@ -913,7 +915,7 @@ def transform_map(data, shift_x=0, shift_y=0, angle_x=0, angle_y=0):
     rot = R.from_euler('zy', [-angle_x, angle_y], degrees=True)
     m = rot.as_matrix()
     nx, ny, nz = data.shape
-    bcenter = np.array((nx//2, ny//2, nz//2), dtype=np.float)
+    bcenter = np.array((nx//2, ny//2, nz//2), dtype=m.dtype)
     offset = bcenter.T - np.dot(m, bcenter.T) + np.array([0.0, shift_y, -shift_x])
     ret = affine_transform(data, matrix=m, offset=offset, mode='nearest')
     return ret
