@@ -128,29 +128,44 @@ def main():
             st.warning(f"The map is blank: min={data.min()} max={data.max()} mean={data.mean()} sigma={np.std(data)}. Please provide a valid 3D map")
             st.stop()
 
-        data = normalize(data)
+        data_orig = normalize(data)
 
         section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
         mapping = {"X":(nx, 2), "Y":(ny, 1), "Z":(nz, 0)}
         n, axis = mapping[section_axis]
         section_index = st.slider(label="Choose a section to display:", min_value=1, max_value=n, value=n//2+1, step=1)
         container_image = st.beta_container()
+        
+        expanded = False if is_emd else True
+        with st.beta_expander(label="Transform the map", expanded=expanded):
+            do_threshold = st.checkbox("Threshold the map", value=False)
+            if do_threshold:
+                data_min, data_max = float(data_orig.min()), float(data_orig.max())
+                background = np.mean(data_orig[[0,1,2,-3,-2,-1],[0,1,2,-3,-2,-1]])
+                thresh_auto = (data_max-background) * 0.2 + background
+                thresh = st.number_input(label="Minimal voxel value:", min_value=data_min, max_value=data_max, value=float(round(thresh_auto,6)), step=float((data_max-data_min)/1000.), format="%g")
+            else:
+                thresh = None
+            if thresh is not None:
+                data = data_orig * 1.0
+                data[data<thresh] = 0
+            else:
+                data = data_orig
 
-        with st.beta_expander(label="Transform the map", expanded=False):
-            do_auto_transform = st.checkbox("Center & verticalize the map", value=(not is_emd))
-            if do_auto_transform:
+            do_transform = st.checkbox("Center & verticalize", value=(not is_emd))
+            if do_transform:
                 rotx_auto, shifty_auto = auto_vertical_center(np.sum(data, axis=2))
                 roty_auto, shiftx_auto = auto_vertical_center(np.sum(data, axis=1))
+                rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=round(rotx_auto,2), step=1.0, format="%g")
+                roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=round(roty_auto,2), step=1.0, format="%g")
+                shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(shiftx_auto*apix,2), step=1.0, format="%g")
+                shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=round(shifty_auto*apix,2), step=1.0, format="%g")
             else:
-                rotx_auto, roty_auto, shiftx_auto, shifty_auto = 0., 0., 0., 0.
-            rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=round(rotx_auto,2), step=1.0, format="%g")
-            roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=round(roty_auto,2), step=1.0, format="%g")
-            shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(shiftx_auto*apix,2), step=1.0, format="%g")
-            shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=round(shifty_auto*apix,2), step=1.0, format="%g")
+                rotx, roty, shiftx, shifty = 0., 0., 0., 0.
 
-        image = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
+        image = np.squeeze(np.take(data_orig, indices=[section_index-1], axis=axis))
         h, w = image.shape
-        if rotx or roty or shiftx or shifty:
+        if thresh is not None or rotx or roty or shiftx or shifty:
             data = transform_map(data, shift_x=shiftx/apix, shift_y=-shifty/apix, angle_x=-rotx, angle_y=-roty)
             image2 = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
             with container_image:
@@ -764,14 +779,14 @@ def find_peaks(acf, da, dz, peak_diameter=0.025, minmass=1.0, max_peaks=71):
     from trackpy import locate
     # diameter: fraction of the maximal dimension of the image (acf)
     diameter = int(max(acf.shape)*peak_diameter)//2*2+1
-    acf2 = np.hstack((acf, acf, acf))   # to handle peaks at left/right edges
+    acf2 = np.hstack((acf[:, -diameter:], acf, acf[:, :diameter]))   # to handle peaks at left/right edges
     while True:
         f = locate(acf2, diameter=diameter, minmass=minmass)
-        if len(f)>9: break
+        if len(f)>3: break
         minmass *= 0.9
         if minmass<0.1:
             return None
-    f.loc[:, 'x'] -= acf.shape[1]
+    f.loc[:, 'x'] -= diameter
     f = f.loc[ (f['x'] >= 0) & (f['x'] < acf.shape[1]) ]
     f = f.sort_values(["mass"], ascending=False)[:max_peaks]
     peaks = np.zeros((len(f), 2), dtype=float)
@@ -903,7 +918,7 @@ def compute_radial_profile(data):
     from scipy.ndimage.interpolation import map_coordinates
     polar = map_coordinates(proj, coords, order=1).reshape(r_grid.shape)
 
-    rad_profile = polar.sum(axis=0)
+    rad_profile = polar.mean(axis=0)
     return rad_profile
 
 @st.cache(persist=True, show_spinner=False)
@@ -922,10 +937,7 @@ def transform_map(data, shift_x=0, shift_y=0, angle_x=0, angle_y=0):
 
 @st.cache(persist=True, show_spinner=False)
 def auto_vertical_center(image):
-    background = np.mean(image[[0,1,2,-3,-2,-1],[0,1,2,-3,-2,-1]])
-    thresh = (image.max()-background) * 0.2 + background
     image_work = 1.0 * image
-    image_work[image<thresh] = 0
 
     # rough estimate of rotation
     def score_rotation(angle):
