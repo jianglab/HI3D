@@ -74,7 +74,7 @@ def main():
                     st.warning(f"The uploaded file {fileobj.name} ({nx}x{ny}x{nz}) is not a 3D map")
                     data = None
         elif input_mode == 1: # "url":
-            url_default = "http://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-10499/map/emd_10499.map.gz"
+            url_default = "https://ftp.wwpdb.org/pub/emdb/structures/EMD-10499/map/emd_10499.map.gz"
             label = "Input the url of a 3D map:"
             value = query_params["url"][0] if "url" in query_params else url_default
             url = st.text_input(label=label, value=value, help="An online url (http:// or ftp://) or a local file path (/path/to/your/structure.mrc)")
@@ -1040,12 +1040,18 @@ def get_emdb_ids():
 @st.cache(persist=True, show_spinner=False)
 def get_emdb_map(emdid):
     emdid_number = emdid.lower().split("emd-")[-1]
-    url = f"http://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-{emdid_number}/map/emd_{emdid_number}.map.gz"
+    server = "https://ftp.wwpdb.org/pub"    # Rutgers University, USA
+    #server = "https://ftp.ebi.ac.uk/pub/databases" # European Bioinformatics Institute, England
+    #server = "http://ftp.pdbj.org/pub" # Osaka University, Japan
+    url = f"{server}/emdb/structures/EMD-{emdid_number}/map/emd_{emdid_number}.map.gz"
     return get_3d_map_from_url(url)
 
-@st.cache(persist=True, show_spinner=False)
+@st.cache(persist=True, show_spinner=False, suppress_st_warning=True)
 def get_3d_map_from_url(url):
     ds = np.DataSource(None)
+    if not ds.exists(url):
+        st.error(f"ERROR: {url} does not exist")
+        st.stop()
     fp=ds.open(url)
     return get_3d_map_from_file(fp.name)
 
