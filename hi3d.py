@@ -91,6 +91,8 @@ def main():
                 st.warning("failed to obtained a list of helical structures in EMDB")
                 return
             if input_mode == 2:   # "emd-xxxxx":
+                url = "https://www.ebi.ac.uk/emdb/search/*%20AND%20structure_determination_method:%22helical%22?rows=10&sort=release_date%20desc"
+                st.markdown(f'[All {len(emdb_ids)} helical structures in EMDB]({url})')
                 label = "Input an EMDB ID (emd-xxxxx):"
                 value = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
                 emd_id = st.text_input(label=label, value=value)
@@ -1031,7 +1033,7 @@ def get_3d_map_from_uploaded_file(fileobj):
 def get_emdb_ids():
     try:
         import pandas as pd
-        emdb_ids = pd.read_csv("https://wwwdev.ebi.ac.uk/emdb/api/search/*%20AND%20structure_determination_method:%22helical%22?wt=csv&download=true&fl=emdb_id")
+        emdb_ids = pd.read_csv("https://www.ebi.ac.uk/emdb/api/search/*%20AND%20structure_determination_method:%22helical%22?wt=csv&download=true&fl=emdb_id")
         emdb_ids = list(emdb_ids.iloc[:,0].str.split('-', expand=True).iloc[:, 1].values)
     except:
         emdb_ids = []
