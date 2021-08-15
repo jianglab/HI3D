@@ -49,18 +49,18 @@ def main():
 
     query_params = st.experimental_get_query_params()
 
-    col1, col2, col3, col4 = st.beta_columns((1.0, 3.2, 0.6, 1.15))
+    col1, col2, col3, col4 = st.columns((1.0, 3.2, 0.6, 1.15))
 
     msg_empty = col2.empty()
 
     with col1:
-        with st.beta_expander(label="README", expanded=False):
+        with st.expander(label="README", expanded=False):
             st.write("This Web app considers a biological helical structure as a 2D crystal that has been rolled up into a cylindrical tube while preserving the original lattice. The indexing process is thus to computationally reverse this process: the 3D helical structure is first unrolled into a 2D image using cylindrical projection, and then the 2D lattice parameters are automatically identified from which the helical parameters (twist, rise, and cyclic symmetry) are derived. The auto-correlation function (ACF) of the cylindrical projection is used to provide a lattice with sharper peaks. Two distinct lattice identification methods, one for generical 2D lattice and one specifically for helical lattice, are used to find a consistent solution.  \n  \nTips: play with the rmin/rmax, #peaks, axial step size parameters if consistent helical parameters cannot be obtained with the default parameters. Use a larger axial step size (for example 2Å) for a structure with large rise.\n  \nTips: maximize the browser window or zoom-out the browser view (using ctrl- or ⌘- key combinations) if the displayed images overlap each other.")
         
         data = None
         # make radio display horizontal
         st.markdown('<style>div.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
-        input_modes = {0:"upload", 1:"url", 2:"emd-xxxxx", 3:"random"}
+        input_modes = {0:"upload", 1:"url", 2:"emd-xxxxx"}
         value = int(query_params["input_mode"][0]) if "input_mode" in query_params else 2
         input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value, help="Only maps in MRC (*\*.mrc*) or CCP4 (*\*.map*) format are supported. Compressed maps (*\*.gz*) will be automatically decompressed")
         is_emd = False
@@ -85,33 +85,32 @@ def main():
             if nz<32:
                 st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
                 data = None
-        elif input_mode in [2, 3]:            
+        elif input_mode == 2:            
             emdb_ids = get_emdb_ids()
             if not emdb_ids:
                 st.warning("failed to obtained a list of helical structures in EMDB")
                 return
-            if input_mode == 2:   # "emd-xxxxx":
-                url = "https://www.ebi.ac.uk/emdb/search/*%20AND%20structure_determination_method:%22helical%22?rows=10&sort=release_date%20desc"
-                st.markdown(f'[All {len(emdb_ids)} helical structures in EMDB]({url})')
+            if 'emd_id' not in st.session_state:
+                st.session_state.emd_id = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
+            url = "https://www.ebi.ac.uk/emdb/search/*%20AND%20structure_determination_method:%22helical%22?rows=10&sort=release_date%20desc"
+            st.markdown(f'[All {len(emdb_ids)} helical structures in EMDB]({url})')
+            do_random_embid = st.checkbox("Choose a random EMDB ID", value=False)
+            if do_random_embid:
+                button_clicked = st.button(label="Change EMDB ID", help="Randomly select another helical structure in EMDB")
+                if button_clicked:
+                    import random
+                    st.session_state.emd_id = 'emd-' + random.choice(emdb_ids)
+            else:
                 label = "Input an EMDB ID (emd-xxxxx):"
-                value = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
-                emd_id = st.text_input(label=label, value=value)
-                emd_id = emd_id.lower().split("emd-")[-1]
+                st.text_input(label=label, key='emd_id')
+                emd_id = st.session_state.emd_id.lower().split("emd-")[-1]
                 if emd_id not in emdb_ids:
                     emd_id_bad = emd_id
                     import random
                     emd_id = random.choice(emdb_ids)
                     st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')")
                     return
-            elif input_mode == 3:   # "random":
-                import random
-                button_clicked = st.button(label="Change EMDB ID", help="Randomly select another helical structure in EMDB")
-                if button_clicked or "emdid" not in query_params:
-                    emd_id = random.choice(emdb_ids)
-                else:
-                    emd_id = random.choice(emdb_ids)
-                    try: emd_id = query_params["emdid"][0].lower().split("emd-")[-1]
-                    except: pass
+            emd_id = st.session_state.emd_id.lower().split("emd-")[-1]
             with st.spinner(f'Downloading EMD-{emd_id}'):
                 data, apix = get_emdb_map(emd_id)
             if data is None:
@@ -136,10 +135,10 @@ def main():
         mapping = {"X":(nx, 2), "Y":(ny, 1), "Z":(nz, 0)}
         n, axis = mapping[section_axis]
         section_index = st.slider(label="Choose a section to display:", min_value=1, max_value=n, value=n//2+1, step=1)
-        container_image = st.beta_container()
+        container_image = st.container()
         
         expanded = False if is_emd else True
-        with st.beta_expander(label="Transform the map", expanded=expanded):
+        with st.expander(label="Transform the map", expanded=expanded):
             do_threshold = st.checkbox("Threshold the map", value=False)
             if do_threshold:
                 data_min, data_max = float(data_orig.min()), float(data_orig.max())
@@ -224,7 +223,7 @@ def main():
 
         rad_plot = st.empty()
 
-        with st.beta_expander(label="Select radial range", expanded=False):
+        with st.expander(label="Select radial range", expanded=False):
             radprofile = compute_radial_profile(data)
             rad = np.arange(len(radprofile)) * apix
             rmin_auto, rmax_auto = estimate_radial_range(radprofile, thresh_ratio=0.1)
@@ -249,7 +248,7 @@ def main():
         with rad_plot:
             st.bokeh_chart(fig_radprofile, use_container_width=True)
 
-        set_url = st.button("Get link", help="Click to make the URL a sharable link")
+        set_url = st.button("Get a sharable link", help="Click to make the URL a sharable link")
 
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
 
