@@ -35,7 +35,7 @@ def import_with_auto_install(packages, scope=locals()):
             import subprocess
             subprocess.call(f'pip install {package_pip_name}', shell=True)
             scope[package_import_name] =  __import__(package_import_name)
-required_packages = "streamlit numpy scipy pandas bokeh skimage:scikit_image mrcfile trackpy".split()
+required_packages = "streamlit numpy scipy pandas bokeh skimage:scikit_image mrcfile trackpy xmltodict".split()
 import_with_auto_install(required_packages)
 
 import streamlit as st
@@ -116,7 +116,11 @@ def main():
             if data is None:
                 st.warning(f"Failed to download [EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})")
                 return
-            st.markdown(f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})')
+            msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})'
+            params = get_helical_parameters(emd_id)
+            if params:
+                msg += f"|twist={params['twist']}°|rise={params['rise']}Å|c{params['csym']}"
+            st.markdown(msg)
             is_emd = True
 
         if data is None:
@@ -1037,6 +1041,25 @@ def get_emdb_ids():
     except:
         emdb_ids = []
     return emdb_ids
+
+@st.cache(persist=True, show_spinner=False)
+def get_helical_parameters(emd_id):
+  try:
+    emd_id2 = ''.join([s for s in str(emd_id) if s.isdigit()])
+    url = f"https://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-{emd_id2}/header/emd-{emd_id2}.xml"
+    from urllib.request import urlopen
+    with urlopen(url) as response:
+      xml_data = response.read()
+    import xmltodict
+    data = xmltodict.parse(xml_data)
+    helical_parameters = data['emdEntry']['experiment']['specimenPreparation']['helicalParameters']
+    ret = {}
+    ret["twist"] = float(helical_parameters['deltaPhi']['#text'])
+    ret["rise"] = float(helical_parameters['deltaZ']['#text'])
+    ret["csym"] = int(helical_parameters['axialSymmetry'][1:])
+  except:
+    ret = None
+  return ret
 
 @st.cache(persist=True, show_spinner=False)
 def get_emdb_map(emdid):
