@@ -111,16 +111,19 @@ def main():
                     st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')")
                     return
             emd_id = st.session_state.emd_id.lower().split("emd-")[-1]
+            msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})'
+            params = get_emdb_helical_parameters(emd_id)
+            if params:
+                msg += f" | resolution={params['resolution']}Å"
+                msg += f"  \ntwist={params['twist']}° | rise={params['rise']}Å | c{params['csym']}"
+            else:
+                msg += " | *helical params not available*"
+            st.markdown(msg)
             with st.spinner(f'Downloading EMD-{emd_id}'):
                 data, apix = get_emdb_map(emd_id)
             if data is None:
                 st.warning(f"Failed to download [EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})")
                 return
-            msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})'
-            params = get_helical_parameters(emd_id)
-            if params:
-                msg += f"|twist={params['twist']}°|rise={params['rise']}Å|c{params['csym']}"
-            st.markdown(msg)
             is_emd = True
 
         if data is None:
@@ -1043,7 +1046,7 @@ def get_emdb_ids():
     return emdb_ids
 
 @st.cache(persist=True, show_spinner=False)
-def get_helical_parameters(emd_id):
+def get_emdb_helical_parameters(emd_id):
   try:
     emd_id2 = ''.join([s for s in str(emd_id) if s.isdigit()])
     url = f"https://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-{emd_id2}/header/emd-{emd_id2}.xml"
@@ -1053,10 +1056,13 @@ def get_helical_parameters(emd_id):
     import xmltodict
     data = xmltodict.parse(xml_data)
     helical_parameters = data['emdEntry']['experiment']['specimenPreparation']['helicalParameters']
+    assert(helical_parameters['deltaPhi']['@units'] == 'degrees')
+    assert(helical_parameters['deltaZ']['@units'] == 'A')
     ret = {}
     ret["twist"] = float(helical_parameters['deltaPhi']['#text'])
     ret["rise"] = float(helical_parameters['deltaZ']['#text'])
     ret["csym"] = int(helical_parameters['axialSymmetry'][1:])
+    ret["resolution"] = float(data['emdEntry']['processing']['reconstruction']['resolutionByAuthor'])
   except:
     ret = None
   return ret
