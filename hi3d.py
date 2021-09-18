@@ -86,7 +86,7 @@ def main():
                 st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
                 data = None
         elif input_mode == 2:            
-            emdb_ids = get_emdb_ids()
+            emdb_ids, _ = get_emdb_ids()
             if not emdb_ids:
                 st.warning("failed to obtained a list of helical structures in EMDB")
                 return
@@ -847,22 +847,20 @@ def cylindrical_projection(map3d, da=1, dz=1, dr=1, rmin=0, rmax=-1, interpolati
         rmax = min(nx//2, ny//2)
     assert(rmin<rmax)
     
-    r = np.arange(rmin, rmax, dr, dtype=np.float32)
     theta = (np.arange(0, 360, da, dtype=np.float32) - 90) * np.pi/180.
     #z = np.arange(0, nz, dz)    # use entire length
     n_theta = len(theta)
     z = np.arange(max(0, nz//2-n_theta//2*dz), min(nz, nz//2+n_theta//2*dz), dz, dtype=np.float32)    # use only the central segment 
 
-    z_grid, theta_grid, r_grid = np.meshgrid(z, theta, r, indexing='ij', copy=False)
-    y_grid = ny//2 + r_grid * np.sin(theta_grid)
-    x_grid = nx//2 + r_grid * np.cos(theta_grid)
-
-    coords = np.vstack((z_grid.flatten(), y_grid.flatten(), x_grid.flatten()))
-
     from scipy.ndimage.interpolation import map_coordinates
-    cylindrical_map = map_coordinates(map3d, coords, order=interpolation_order, mode='nearest').reshape(z_grid.shape)
-    cylindrical_proj = (cylindrical_map*r_grid).sum(axis=2)/r_grid.sum(axis=2)
-
+    cylindrical_proj = np.zeros((len(z), len(theta)), dtype=np.float32)
+    for r in np.arange(rmin, rmax, dr, dtype=np.float32):
+        z_grid, theta_grid = np.meshgrid(z, theta, indexing='ij', copy=False)
+        y_grid = ny//2 + r * np.sin(theta_grid)
+        x_grid = nx//2 + r * np.cos(theta_grid)
+        coords = np.vstack((z_grid.flatten(), y_grid.flatten(), x_grid.flatten()))
+        cylindrical_image = map_coordinates(map3d, coords, order=interpolation_order, mode='nearest').reshape(z_grid.shape)
+        cylindrical_proj += cylindrical_image * r
     cylindrical_proj = normalize(cylindrical_proj)
 
     return cylindrical_proj
@@ -1039,11 +1037,13 @@ def get_3d_map_from_uploaded_file(fileobj):
 def get_emdb_ids():
     try:
         import pandas as pd
-        emdb_ids = pd.read_csv("https://www.ebi.ac.uk/emdb/api/search/*%20AND%20structure_determination_method:%22helical%22?wt=csv&download=true&fl=emdb_id")
-        emdb_ids = list(emdb_ids.iloc[:,0].str.split('-', expand=True).iloc[:, 1].values)
+        entries = pd.read_csv("https://www.ebi.ac.uk/emdb/api/search/*%20AND%20structure_determination_method:%22helical%22?wt=csv&download=true&fl=emdb_id,resolution")
+        emdb_ids = list(entries.iloc[:,0].str.split('-', expand=True).iloc[:, 1].values)
+        resolutions = entries.iloc[:,1].values
     except:
         emdb_ids = []
-    return emdb_ids
+        resolutions = []
+    return emdb_ids, resolutions
 
 @st.cache(persist=True, show_spinner=False)
 def get_emdb_helical_parameters(emd_id):
