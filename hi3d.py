@@ -86,7 +86,7 @@ def main():
                 st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
                 data = None
         elif input_mode == 2:            
-            emdb_ids, _ = get_emdb_ids()
+            emdb_ids, resolutions = get_emdb_ids()
             if not emdb_ids:
                 st.warning("failed to obtained a list of helical structures in EMDB")
                 return
@@ -111,13 +111,13 @@ def main():
                     st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')")
                     return
             emd_id = st.session_state.emd_id.lower().split("emd-")[-1]
-            msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})'
+            resolution = resolutions[emdb_ids.index(emd_id)]
+            msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id}) | resolution={resolution}Å'
             params = get_emdb_helical_parameters(emd_id)
             if params:
-                msg += f" | resolution={params['resolution']}Å"
                 msg += f"  \ntwist={params['twist']}° | rise={params['rise']}Å | c{params['csym']}"
             else:
-                msg += " | *helical params not available*"
+                msg +=  "  \n*helical params not available*"
             st.markdown(msg)
             with st.spinner(f'Downloading EMD-{emd_id}'):
                 data, apix = get_emdb_map(emd_id)
@@ -929,6 +929,8 @@ def compute_radial_profile(data):
 
 @st.cache(persist=True, show_spinner=False)
 def transform_map(data, shift_x=0, shift_y=0, angle_x=0, angle_y=0):
+    if not (shift_x or shift_y or angle_x or angle_y):
+        return data
     from scipy.spatial.transform import Rotation as R
     from scipy.ndimage import affine_transform
     # note the convention change
