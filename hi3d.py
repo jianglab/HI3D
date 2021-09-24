@@ -48,6 +48,11 @@ def main():
     st.title(title)
 
     query_params = st.experimental_get_query_params()
+    
+    if is_hosted(): max_map_size=256    #MB
+    else: max_map_size=-1   # no limit
+    if max_map_size>0:
+        warning_map_size = f"Due to the resource limit of the free hosting service, the maximal map size should be {max_map_size} MB (400x400x400 voxels) or less to avoid crashing the server process"
 
     col1, col2, col3, col4 = st.columns((1.0, 3.2, 0.6, 1.15))
 
@@ -58,14 +63,20 @@ def main():
             st.write("This Web app considers a biological helical structure as a 2D crystal that has been rolled up into a cylindrical tube while preserving the original lattice. The indexing process is thus to computationally reverse this process: the 3D helical structure is first unrolled into a 2D image using cylindrical projection, and then the 2D lattice parameters are automatically identified from which the helical parameters (twist, rise, and cyclic symmetry) are derived. The auto-correlation function (ACF) of the cylindrical projection is used to provide a lattice with sharper peaks. Two distinct lattice identification methods, one for generical 2D lattice and one specifically for helical lattice, are used to find a consistent solution.  \n  \nTips: play with the rmin/rmax, #peaks, axial step size parameters if consistent helical parameters cannot be obtained with the default parameters. Use a larger axial step size (for example 2Å) for a structure with large rise.\n  \nTips: maximize the browser window or zoom-out the browser view (using ctrl- or ⌘- key combinations) if the displayed images overlap each other.")
         
         data = None
+        da_auto = 1.0
+        dz_auto = 1.0
         # make radio display horizontal
         st.markdown('<style>div.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
         input_modes = {0:"upload", 1:"url", 2:"emd-xxxxx"}
         value = int(query_params["input_mode"][0]) if "input_mode" in query_params else 2
-        input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value, help="Only maps in MRC (*\*.mrc*) or CCP4 (*\*.map*) format are supported. Compressed maps (*\*.gz*) will be automatically decompressed")
+        help = "Only maps in MRC (*\*.mrc*) or CCP4 (*\*.map*) format are supported. Compressed maps (*\*.gz*) will be automatically decompressed"
+        if max_map_size>0: help += f". {warning_map_size}"
+        input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value, help=help)
         is_emd = False
         if input_mode == 0: # "upload a MRC file":
-            fileobj = st.file_uploader("Upload a map in MRC or CCP4 format", type=['mrc', 'map', 'map.gz'])
+            label = "Upload a map in MRC or CCP4 format"
+            if max_map_size>0: label += f". {warning_map_size}"
+            fileobj = st.file_uploader(label, type=['mrc', 'map', 'map.gz'])
             if fileobj is not None:
                 is_emd = fileobj.name.find("emd_")!=-1
                 data, apix = get_3d_map_from_uploaded_file(fileobj)
@@ -75,9 +86,10 @@ def main():
                     data = None
         elif input_mode == 1: # "url":
             url_default = "https://ftp.wwpdb.org/pub/emdb/structures/EMD-10499/map/emd_10499.map.gz"
-            label = "Input the url of a 3D map:"
+            help = "An online url (http:// or ftp://) or a local file path (/path/to/your/structure.mrc)"
+            if max_map_size>0: help += f". {warning_map_size}"
             value = query_params["url"][0] if "url" in query_params else url_default
-            url = st.text_input(label=label, value=value, help="An online url (http:// or ftp://) or a local file path (/path/to/your/structure.mrc)")
+            url = st.text_input(label="Input the url of a 3D map:", value=value, help=help)
             is_emd = url.find("emd_")!=-1
             with st.spinner(f'Downloading {url.strip()}'):
                 data, apix = get_3d_map_from_url(url.strip())
@@ -114,6 +126,8 @@ def main():
             resolution = resolutions[emdb_ids.index(emd_id)]
             msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id}) | resolution={resolution}Å'
             params = get_emdb_helical_parameters(emd_id)
+            if params and abs(params['rise'])<5 and ((abs(params['twist']))<5 or (abs(params['twist'])>175)):
+                dz_auto = 0.2
             if params:
                 msg += f"  \ntwist={params['twist']}° | rise={params['rise']}Å | c{params['csym']}"
             else:
@@ -136,8 +150,12 @@ def main():
             st.warning(f"The map is blank: min={data.min()} max={data.max()} mean={data.mean()} sigma={np.std(data)}. Please provide a valid 3D map")
             st.stop()
 
-        data_orig = normalize(data)
-
+        if max_map_size>0:
+            map_size = nz*ny*nx*4 / pow(2, 20)
+            if map_size>max_map_size:
+                msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or clipping out the empty padding space around the structure, and then try again. If the crashing persists, please download the [HI3D server script](https://raw.githubusercontent.com/wjiang/HI3D/main/hi3d.py?token=AAOE77NYMWR4KRFI7D4DSVTBJU236) and run on your own computer to avoid the resource limit imposed by the free hosting service"
+                msg_empty.warning(msg)
+        
         section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
         mapping = {"X":(nx, 2), "Y":(ny, 1), "Z":(nz, 0)}
         n, axis = mapping[section_axis]
@@ -148,17 +166,17 @@ def main():
         with st.expander(label="Transform the map", expanded=expanded):
             do_threshold = st.checkbox("Threshold the map", value=False)
             if do_threshold:
-                data_min, data_max = float(data_orig.min()), float(data_orig.max())
-                background = np.mean(data_orig[[0,1,2,-3,-2,-1],[0,1,2,-3,-2,-1]])
+                data_min, data_max = float(data.min()), float(data.max())
+                background = np.mean(data[[0,1,2,-3,-2,-1],[0,1,2,-3,-2,-1]])
                 thresh_auto = (data_max-background) * 0.2 + background
                 thresh = st.number_input(label="Minimal voxel value:", min_value=data_min, max_value=data_max, value=float(round(thresh_auto,6)), step=float((data_max-data_min)/1000.), format="%g")
             else:
                 thresh = None
             if thresh is not None:
-                data = data_orig * 1.0
+                data = data * 1.0
                 data[data<thresh] = 0
             else:
-                data = data_orig
+                data = data
 
             do_transform = st.checkbox("Center & verticalize", value=(not is_emd))
             if do_transform:
@@ -171,7 +189,7 @@ def main():
             else:
                 rotx, roty, shiftx, shifty = 0., 0., 0., 0.
 
-        image = np.squeeze(np.take(data_orig, indices=[section_index-1], axis=axis))
+        image = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
         h, w = image.shape
         if thresh is not None or rotx or roty or shiftx or shifty:
             data = transform_map(data, shift_x=shiftx/apix, shift_y=-shifty/apix, angle_x=-rotx, angle_y=-roty)
@@ -268,13 +286,13 @@ def main():
         st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
 
     with col3:
-        da = st.number_input('Angular step size (°)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the azimuthal angle step size for the computation of the cylindric projection")
-        dz = st.number_input('Axial step size (Å)', value=1.0, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the axial step size for the computation of the cylindric projection. Use a smaller step size (such as 0.2) for a helical structure with small rise")
+        da = st.number_input('Angular step size (°)', value=da_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the azimuthal angle step size for the computation of the cylindric projection")
+        dz = st.number_input('Axial step size (Å)', value=dz_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the axial step size for the computation of the cylindric projection. Use a smaller step size (such as 0.2) for a helical structure with small rise")
 
         npeaks_empty = st.empty()
         
-        data = auto_masking(data)
-        data = minimal_grids(data)
+        #data = auto_masking(data)
+        #data = minimal_grids(data)
         cylproj = cylindrical_projection(data, da=da, dz=dz/apix, dr=1, rmin=rmin/apix, rmax=rmax/apix, interpolation_order=1)
 
         cylproj_work = cylproj
@@ -515,7 +533,6 @@ def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
     
     return (twist1, rise1, cn1), (twist2, rise2, cn2)
 
-@st.cache(persist=True, show_spinner=False)
 def consistent_twist_rise_cn_sets(twist_rise_cn_set_1, twist_rise_cn_set_2, epsilon=1.0):
     def consistent_twist_rise_cn_pair(twist_rise_cn_1, twist_rise_cn_2, epsilon=1.0):
         def good_twist_rise_cn(twist, rise, cn, epsilon=1):
@@ -545,7 +562,7 @@ def consistent_twist_rise_cn_sets(twist_rise_cn_set_1, twist_rise_cn_set_2, epsi
             if trc: return trc
     return None
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def refine_twist_rise(acf_image, twist, rise, cn):
     from scipy.ndimage import map_coordinates
     from scipy.optimize import minimize
@@ -572,7 +589,7 @@ def refine_twist_rise(acf_image, twist, rise, cn):
     twist_opt, rise_opt = res.x
     return twist_opt, rise_opt
 
-@st.cache(persist=True, show_spinner=False, suppress_st_warning=True)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False, suppress_st_warning=True)
 def getHelicalLattice(peaks):
     if len(peaks) < 3:
         #st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
@@ -636,7 +653,7 @@ def getHelicalLattice(peaks):
 
     return (twist, rise, cn)
 
-@st.cache(persist=True, show_spinner=False, suppress_st_warning=True)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False, suppress_st_warning=True)
 def getGenericLattice(peaks):
     if len(peaks) < 3:
         #st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
@@ -782,7 +799,7 @@ def getGenericLattice(peaks):
             elif twist>0: twist-=360./cn
     return twist, rise, cn
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def find_peaks(acf, da, dz, peak_diameter=0.025, minmass=1.0, max_peaks=71):
     from trackpy import locate
     # diameter: fraction of the maximal dimension of the image (acf)
@@ -804,7 +821,7 @@ def find_peaks(acf, da, dz, peak_diameter=0.025, minmass=1.0, max_peaks=71):
     peaks[:, 1] *= dz  # the values are now in Angstrom
     return peaks
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def auto_correlation(data, high_pass_fraction=0):
     from scipy.signal import correlate2d
     fft = np.fft.rfft2(data)
@@ -822,7 +839,7 @@ def auto_correlation(data, high_pass_fraction=0):
     corr = normalize(corr)
     return corr
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def make_square_shape(cylproj):
     nz, na = cylproj.shape
     if nz<na:
@@ -837,7 +854,7 @@ def make_square_shape(cylproj):
         ret = cylproj
     return ret
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def cylindrical_projection(map3d, da=1, dz=1, dr=1, rmin=0, rmax=-1, interpolation_order=1):
     # da: degree
     # dr/dz/rmin/rmax: pixel
@@ -865,7 +882,7 @@ def cylindrical_projection(map3d, da=1, dz=1, dr=1, rmin=0, rmax=-1, interpolati
 
     return cylindrical_proj
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def minimal_grids(map3d):
     from scipy.ndimage import find_objects
     labels = (abs(map3d) >1e-6) * 1
@@ -879,7 +896,7 @@ def minimal_grids(map3d):
     ret = map3d[zmin:zmax, max(0, ny//2-dy):ny//2+dy, max(0, nx//2-dx):nx//2+dx]
     return ret
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def auto_masking(map3d):
     from skimage.segmentation import watershed
     data = (map3d/map3d.max())
@@ -896,7 +913,7 @@ def auto_masking(map3d):
         masked = data
     return masked
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def estimate_radial_range(radprofile, thresh_ratio=0.1):
     background = np.mean(radprofile[-3:])
     thresh = (radprofile.max() - background) * thresh_ratio + background
@@ -905,7 +922,7 @@ def estimate_radial_range(radprofile, thresh_ratio=0.1):
     rmax_auto = np.max(indices)
     return float(rmin_auto), float(rmax_auto)
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def compute_radial_profile(data):
     proj = data.mean(axis=0)
     ny, nx = proj.shape
@@ -927,7 +944,7 @@ def compute_radial_profile(data):
     rad_profile = polar.mean(axis=0)
     return rad_profile
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def transform_map(data, shift_x=0, shift_y=0, angle_x=0, angle_y=0):
     if not (shift_x or shift_y or angle_x or angle_y):
         return data
@@ -943,7 +960,7 @@ def transform_map(data, shift_x=0, shift_y=0, angle_x=0, angle_y=0):
     ret = affine_transform(data, matrix=m, offset=offset, mode='nearest')
     return ret
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def auto_vertical_center(image):
     image_work = 1.0 * image
 
@@ -999,7 +1016,7 @@ def auto_vertical_center(image):
     dx = res.x + (0.0 if n%2 else 0.5)
     return angle, dx
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def rotate_shift_image(data, angle=0, pre_shift=(0, 0), post_shift=(0, 0), rotation_center=None, order=1):
     # pre_shift/rotation_center/post_shift: [y, x]
     if angle==0 and pre_shift==[0,0] and post_shift==[0,0]: return data*1.0
@@ -1019,14 +1036,14 @@ def rotate_shift_image(data, angle=0, pre_shift=(0, 0), post_shift=(0, 0), rotat
     ret = affine_transform(data, matrix=m, offset=offset, order=order, mode='constant')
     return ret
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def normalize(data, percentile=(0, 100)):
     p0, p1 = percentile
     vmin, vmax = sorted(np.percentile(data, (p0, p1)))
     data2 = (data-vmin)/(vmax-vmin)
     return data2
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_3d_map_from_uploaded_file(fileobj):
     import os, tempfile
     orignal_filename = fileobj.name
@@ -1035,7 +1052,7 @@ def get_3d_map_from_uploaded_file(fileobj):
         temp.write(fileobj.read())
         return get_3d_map_from_file(temp.name)
 
-@st.cache(persist=True, show_spinner=False, ttl=24*60*60.) # refresh every day
+@st.experimental_singleton(show_spinner=False)
 def get_emdb_ids():
     try:
         import pandas as pd
@@ -1047,7 +1064,7 @@ def get_emdb_ids():
         resolutions = []
     return emdb_ids, resolutions
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_emdb_helical_parameters(emd_id):
   try:
     emd_id2 = ''.join([s for s in str(emd_id) if s.isdigit()])
@@ -1069,7 +1086,7 @@ def get_emdb_helical_parameters(emd_id):
     ret = None
   return ret
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_emdb_map(emdid):
     emdid_number = emdid.lower().split("emd-")[-1]
     server = "https://ftp.wwpdb.org/pub"    # Rutgers University, USA
@@ -1078,26 +1095,27 @@ def get_emdb_map(emdid):
     url = f"{server}/emdb/structures/EMD-{emdid_number}/map/emd_{emdid_number}.map.gz"
     return get_3d_map_from_url(url)
 
-@st.cache(persist=True, show_spinner=False, suppress_st_warning=True)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_3d_map_from_url(url):
     ds = np.DataSource(None)
     if not ds.exists(url):
         st.error(f"ERROR: {url} does not exist")
         st.stop()
-    fp=ds.open(url)
-    return get_3d_map_from_file(fp.name)
+    with ds.open(url) as fp:
+        data = get_3d_map_from_file(fp.name)
+    return data
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_3d_map_from_file(filename):
     import mrcfile
     data = None
     with mrcfile.open(filename) as mrc:
         apix = mrc.voxel_size.x.item()
         is3d = mrc.is_volume() or mrc.is_volume_stack()
-        data = mrc.data * 1.0
+        data = mrc.data.astype(np.float32, copy=False)
     return data, apix
 
-@st.cache(persist=True, show_spinner=False)
+@st.experimental_singleton(show_spinner=False)
 def setup_anonymous_usage_tracking():
     try:
         import pathlib, stat
@@ -1109,6 +1127,21 @@ def setup_anonymous_usage_tracking():
             index_file.write_text(txt)
     except:
         pass
+
+#@st.experimental_memo()
+def is_hosted():
+    import socket
+    fqdn = socket.getfqdn()
+    if fqdn.find("heroku")!=-1 or fqdn.find("streamlit")!=-1:
+        return True
+    else:
+        return False
+
+def print_memory_usage():
+    from inspect import currentframe
+    import psutil, os
+    cf = currentframe()
+    print(f'Line {cf.f_back.f_lineno}: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 2} MB')
 
 if __name__ == "__main__":
     setup_anonymous_usage_tracking()
