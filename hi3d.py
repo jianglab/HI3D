@@ -40,7 +40,7 @@ import_with_auto_install(required_packages)
 
 import streamlit as st
 import numpy as np
-import math, random
+import math, random, gc
 
 def main():
     title = "HI3D: Helical indexing using the cylindrical projection of a 3D map"
@@ -48,11 +48,16 @@ def main():
     st.title(title)
 
     query_params = st.experimental_get_query_params()
+    st.elements.utils._shown_default_value_warning = True
     
-    if is_hosted(): max_map_size=256    #MB
-    else: max_map_size=-1   # no limit
+    if is_hosted():
+        max_map_size = 100    # MB
+        max_map_dim  = 300   # pixels in any dimension
+    else:
+        max_map_size = -1   # no limit
+        max_map_dim  = -1
     if max_map_size>0:
-        warning_map_size = f"Due to the resource limit of the free hosting service, the maximal map size should be {max_map_size} MB (400x400x400 voxels) or less to avoid crashing the server process"
+        warning_map_size = f"Due to the resource limit of the free hosting service, the maximal map size should be {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less to avoid crashing the server process"
 
     col1, col2, col3, col4 = st.columns((1.0, 3.2, 0.6, 1.15))
 
@@ -114,7 +119,7 @@ def main():
                     st.session_state.emd_id = 'emd-' + random.choice(emdb_ids)
             else:
                 label = "Input an EMDB ID (emd-xxxxx):"
-                st.text_input(label=label, key='emd_id')
+                st.text_input(label=label, value=st.session_state.emd_id, key='emd_id')
                 emd_id = st.session_state.emd_id.lower().split("emd-")[-1]
                 if emd_id not in emdb_ids:
                     emd_id_bad = emd_id
@@ -125,7 +130,7 @@ def main():
             emd_id = st.session_state.emd_id.lower().split("emd-")[-1]
             resolution = resolutions[emdb_ids.index(emd_id)]
             msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id}) | resolution={resolution}Å'
-            params = get_emdb_helical_parameters(emd_id)
+            params = get_emdb_parameters(emd_id)
             if params and abs(params['rise'])<5 and ((abs(params['twist']))<5 or (abs(params['twist'])>175)):
                 dz_auto = 0.2
             if params:
@@ -146,15 +151,23 @@ def main():
         nz, ny, nx = data.shape
         st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
 
-        if np.std(data) == 0:
+        if data.min() == data.max():
             st.warning(f"The map is blank: min={data.min()} max={data.max()} mean={data.mean()} sigma={np.std(data)}. Please provide a valid 3D map")
             st.stop()
 
         if max_map_size>0:
             map_size = nz*ny*nx*4 / pow(2, 20)
             if map_size>max_map_size:
-                msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or clipping out the empty padding space around the structure, and then try again. If the crashing persists, please download the [HI3D server script](https://raw.githubusercontent.com/wjiang/HI3D/main/hi3d.py?token=AAOE77NYMWR4KRFI7D4DSVTBJU236) and run on your own computer to avoid the resource limit imposed by the free hosting service"
-                msg_empty.warning(msg)
+                reduce_map_size = st.checkbox(f"Reduce map size to < {max_map_size} MB", value=True)
+                if reduce_map_size:
+                    data, bin = minimal_grids(data, max_map_dim)
+                    gc.collect(2)
+                    apix *= bin
+                    nz, ny, nx = data.shape
+                    st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
+                else:
+                    msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or clipping out the empty padding space around the structure, and then try again. If the crashing persists, please download the [HI3D server script](https://raw.githubusercontent.com/wjiang/HI3D/main/hi3d.py?token=AAOE77NYMWR4KRFI7D4DSVTBJU236) and run on your own computer to avoid the resource limit imposed by the free hosting service"
+                    msg_empty.warning(msg)
         
         section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
         mapping = {"X":(nx, 2), "Y":(ny, 1), "Z":(nz, 0)}
@@ -455,6 +468,8 @@ def main():
             st.experimental_set_query_params()
     else:
         st.experimental_set_query_params()
+
+    gc.collect(2)
 
 def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, x_axis_label='x', y_axis_label='y', tooltips=None, show_axis=True, show_toolbar=True, crosshair_color="white", aspect_ratio=None):
     from bokeh.plotting import figure
@@ -882,19 +897,14 @@ def cylindrical_projection(map3d, da=1, dz=1, dr=1, rmin=0, rmax=-1, interpolati
 
     return cylindrical_proj
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
-def minimal_grids(map3d):
-    from scipy.ndimage import find_objects
-    labels = (abs(map3d) >1e-6) * 1
-    objs = find_objects(labels)
+#@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+def minimal_grids(map3d, max_map_dim=300, delete_input=True):
     nz, ny, nx = map3d.shape
-    zmin, zmax = objs[0][0].start, objs[0][0].stop
-    ymin, ymax = objs[0][1].start, objs[0][1].stop
-    xmin, xmax = objs[0][2].start, objs[0][2].stop
-    dy = max(abs(ymin-ny//2), abs(ymax-ny//2))+1
-    dx = max(abs(xmin-nx//2), abs(xmax-nx//2))+1
-    ret = map3d[zmin:zmax, max(0, ny//2-dy):ny//2+dy, max(0, nx//2-dx):nx//2+dx]
-    return ret
+    n_min = min(map3d.shape)
+    bin = max(1, n_min//max_map_dim+1)
+    ret = map3d[nz//2-n_min//2:nz//2+n_min//2:bin, ny//2-n_min//2:ny//2+n_min//2:bin, nx//2-n_min//2:nx//2+n_min//2:bin] * 1.0
+    if delete_input: del map3d
+    return ret, bin
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def auto_masking(map3d):
@@ -1065,7 +1075,7 @@ def get_emdb_ids():
     return emdb_ids, resolutions
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
-def get_emdb_helical_parameters(emd_id):
+def get_emdb_parameters(emd_id):
   try:
     emd_id2 = ''.join([s for s in str(emd_id) if s.isdigit()])
     url = f"https://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-{emd_id2}/header/emd-{emd_id2}.xml"
@@ -1082,18 +1092,23 @@ def get_emdb_helical_parameters(emd_id):
     ret["rise"] = float(helical_parameters['deltaZ']['#text'])
     ret["csym"] = int(helical_parameters['axialSymmetry'][1:])
     ret["resolution"] = float(data['emdEntry']['processing']['reconstruction']['resolutionByAuthor'])
+    dimensions = data['emdEntry']['map']['dimensions']
+    ret["nz"] = int(dimensions["numSections"])
+    ret["ny"] = int(dimensions["numRows"])
+    ret["nx"] = int(dimensions["numColumns"])
   except:
     ret = None
   return ret
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+#@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_emdb_map(emdid):
     emdid_number = emdid.lower().split("emd-")[-1]
     server = "https://ftp.wwpdb.org/pub"    # Rutgers University, USA
     #server = "https://ftp.ebi.ac.uk/pub/databases" # European Bioinformatics Institute, England
     #server = "http://ftp.pdbj.org/pub" # Osaka University, Japan
     url = f"{server}/emdb/structures/EMD-{emdid_number}/map/emd_{emdid_number}.map.gz"
-    return get_3d_map_from_url(url)
+    data = get_3d_map_from_url(url)
+    return data
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_3d_map_from_url(url):
@@ -1105,7 +1120,7 @@ def get_3d_map_from_url(url):
         data = get_3d_map_from_file(fp.name)
     return data
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+#@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_3d_map_from_file(filename):
     import mrcfile
     data = None
