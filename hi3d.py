@@ -60,7 +60,7 @@ def main():
         max_map_size = -1   # no limit
         max_map_dim  = -1
     if max_map_size>0:
-        warning_map_size = f"Due to the resource limit of the free hosting service, the maximal map size should be {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less to avoid crashing the server process"
+        warning_map_size = f"Due to the resource limit (512 MB memory cap) of the free hosting service, the maximal map size should be {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less to avoid crashing the server process"
 
     col1, col2, col3, col4 = st.columns((1.0, 3.2, 0.6, 1.15))
 
@@ -83,8 +83,9 @@ def main():
         is_emd = False
         if input_mode == 0: # "upload a MRC file":
             label = "Upload a map in MRC or CCP4 format"
-            if max_map_size>0: label += f". {warning_map_size}"
-            fileobj = st.file_uploader(label, type=['mrc', 'map', 'map.gz'])
+            help = None
+            if max_map_size>0: help = warning_map_size
+            fileobj = st.file_uploader(label, type=['mrc', 'map', 'map.gz'], help=help)
             if fileobj is not None:
                 is_emd = fileobj.name.find("emd_")!=-1 or fileobj.name.find(".map")!=-1 
                 data, apix = get_3d_map_from_uploaded_file(fileobj)
@@ -115,15 +116,19 @@ def main():
             emd_id_default = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
             do_random_embid = st.checkbox("Choose a random EMDB ID", value=False)
             if do_random_embid:
-                button_clicked = st.button(label="Change EMDB ID", help="Randomly select another helical structure in EMDB")
+                help = "Randomly select another helical structure in EMDB"
+                if max_map_size>0: help += f". {warning_map_size}"
+                button_clicked = st.button(label="Change EMDB ID", help=help)
                 if button_clicked:
                     import random
                     st.session_state.emd_id = 'emd-' + random.choice(emdb_ids)
             else:
+                help = None
+                if max_map_size>0: help = warning_map_size
                 label = "Input an EMDB ID (emd-xxxxx):"
                 if 'emd_id' in st.session_state: value = st.session_state.emd_id
                 else: value = emd_id_default
-                emd_id = st.text_input(label=label, value=value, key='emd_id')
+                emd_id = st.text_input(label=label, value=value, key='emd_id', help=help)
                 emd_id = emd_id.lower().split("emd-")[-1]
                 if emd_id not in emdb_ids:
                     emd_id_bad = emd_id
@@ -174,7 +179,7 @@ def main():
                     nz, ny, nx = data.shape
                     st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
                 else:
-                    msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or removing the empty padding space around the structure, and then try again. If the crashing persists, please download the [HI3D server script](https://raw.githubusercontent.com/wjiang/HI3D/main/hi3d.py?token=AAOE77NYMWR4KRFI7D4DSVTBJU236) and run on your own computer to avoid the resource limit imposed by the free hosting service"
+                    msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or removing the empty padding space around the structure, and then try again. If the crashing persists, please download the [HI3D launcher script](https://purdue0-my.sharepoint.com/:u:/g/personal/jiang12_purdue_edu/EUZ58Ft3JA5IoJF_IcxnJvQBEsfEMEwXjV4eX7WXuuKtug?e=8YedWp&download=1) and run on your own computer to avoid the resource limit (512 MB memory cap) imposed by the free hosting service"
                     msg_empty.warning(msg)
         
         section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
