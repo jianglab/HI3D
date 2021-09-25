@@ -35,13 +35,16 @@ def import_with_auto_install(packages, scope=locals()):
             import subprocess
             subprocess.call(f'pip install {package_pip_name}', shell=True)
             scope[package_import_name] =  __import__(package_import_name)
-required_packages = "streamlit numpy scipy pandas bokeh skimage:scikit_image mrcfile trackpy xmltodict".split()
+required_packages = "streamlit numpy scipy bokeh".split()
 import_with_auto_install(required_packages)
 
 import streamlit as st
 import numpy as np
 import math, random, gc
+gc.enable()
 
+#from memory_profiler import profile
+#@profile(precision=4)
 def main():
     title = "HI3D: Helical indexing using the cylindrical projection of a 3D map"
     st.set_page_config(page_title=title, layout="wide")
@@ -107,8 +110,6 @@ def main():
             if not emdb_ids:
                 st.warning("failed to obtained a list of helical structures in EMDB")
                 return
-            if 'emd_id' not in st.session_state:
-                st.session_state.emd_id = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
             url = "https://www.ebi.ac.uk/emdb/search/*%20AND%20structure_determination_method:%22helical%22?rows=10&sort=release_date%20desc"
             st.markdown(f'[All {len(emdb_ids)} helical structures in EMDB]({url})')
             do_random_embid = st.checkbox("Choose a random EMDB ID", value=False)
@@ -119,8 +120,10 @@ def main():
                     st.session_state.emd_id = 'emd-' + random.choice(emdb_ids)
             else:
                 label = "Input an EMDB ID (emd-xxxxx):"
-                st.text_input(label=label, value=st.session_state.emd_id, key='emd_id')
-                emd_id = st.session_state.emd_id.lower().split("emd-")[-1]
+                if 'emd_id' in st.session_state: value=st.session_state.emd_id
+                else: value=query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
+                emd_id = st.text_input(label=label, value=value, key='emd_id')
+                emd_id = emd_id.lower().split("emd-")[-1]
                 if emd_id not in emdb_ids:
                     emd_id_bad = emd_id
                     import random
@@ -160,8 +163,10 @@ def main():
             if map_size>max_map_size:
                 reduce_map_size = st.checkbox(f"Reduce map size to < {max_map_size} MB", value=True)
                 if reduce_map_size:
-                    data, bin = minimal_grids(data, max_map_dim)
+                    data_small, bin = minimal_grids(data, max_map_dim)
+                    del data
                     gc.collect(2)
+                    data = data_small
                     apix *= bin
                     nz, ny, nx = data.shape
                     st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
@@ -188,8 +193,6 @@ def main():
             if thresh is not None:
                 data = data * 1.0
                 data[data<thresh] = 0
-            else:
-                data = data
 
             do_transform = st.checkbox("Center & verticalize", value=(not is_emd))
             if do_transform:
@@ -253,11 +256,13 @@ def main():
                 from bokeh.layouts import column
                 fig_image = column([fig3, fig1, fig2, fig4], sizing_mode='scale_width')
                 st.bokeh_chart(fig_image, use_container_width=True)
+                del fig_image
         else:
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
                 fig_image = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
                 st.bokeh_chart(fig_image, use_container_width=True)
+                del fig_image
 
         rad_plot = st.empty()
 
@@ -285,6 +290,7 @@ def main():
         fig_radprofile.yaxis.visible = False
         with rad_plot:
             st.bokeh_chart(fig_radprofile, use_container_width=True)
+            del fig_radprofile
 
         set_url = st.button("Get a sharable link", help="Click to make the URL a sharable link")
 
@@ -307,6 +313,8 @@ def main():
         #data = auto_masking(data)
         #data = minimal_grids(data)
         cylproj = cylindrical_projection(data, da=da, dz=dz/apix, dr=1, rmin=rmin/apix, rmax=rmax/apix, interpolation_order=1)
+        del data
+        gc.collect(2)
 
         cylproj_work = cylproj
         draw_cylproj_box = False
@@ -375,6 +383,8 @@ def main():
 
             st.text("") # workaround for a layout bug in streamlit 
             st.bokeh_chart(fig_cylproj, use_container_width=True)
+            del fig_cylproj
+            del cylproj
 
         if show_acf:
             st.text("") # workaround for a streamlit layout bug
@@ -395,6 +405,7 @@ def main():
                     fig_acf.circle(x, y, size=size, line_width=2, line_color='yellow', fill_alpha=0)
 
             st.bokeh_chart(fig_acf, use_container_width=True)
+            del fig_acf
 
         if peaks is None:
             msg_empty.warning("No peak was found from the auto-correlation image")
@@ -458,6 +469,8 @@ def main():
 
         st.text("") # workaround for a layout bug in streamlit 
         st.bokeh_chart(fig_indexing, use_container_width=True)
+        del fig_indexing
+        del acf
 
     if set_url:
         if input_mode in [2, 3]:
@@ -468,8 +481,6 @@ def main():
             st.experimental_set_query_params()
     else:
         st.experimental_set_query_params()
-
-    gc.collect(2)
 
 def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, x_axis_label='x', y_axis_label='y', tooltips=None, show_axis=True, show_toolbar=True, crosshair_color="white", aspect_ratio=None):
     from bokeh.plotting import figure
@@ -816,6 +827,7 @@ def getGenericLattice(peaks):
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def find_peaks(acf, da, dz, peak_diameter=0.025, minmass=1.0, max_peaks=71):
+    import_with_auto_install(["trackpy"])
     from trackpy import locate
     # diameter: fraction of the maximal dimension of the image (acf)
     diameter = int(max(acf.shape)*peak_diameter)//2*2+1
@@ -897,17 +909,18 @@ def cylindrical_projection(map3d, da=1, dz=1, dr=1, rmin=0, rmax=-1, interpolati
 
     return cylindrical_proj
 
-#@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
-def minimal_grids(map3d, max_map_dim=300, delete_input=True):
+def minimal_grids(map3d, max_map_dim=300):
     nz, ny, nx = map3d.shape
-    n_min = min(map3d.shape)
-    bin = max(1, n_min//max_map_dim+1)
-    ret = map3d[nz//2-n_min//2:nz//2+n_min//2:bin, ny//2-n_min//2:ny//2+n_min//2:bin, nx//2-n_min//2:nx//2+n_min//2:bin] * 1.0
-    if delete_input: del map3d
+    n_min_xy = min([ny, nx])
+    n_min_z = min(nz, n_min_xy)
+    bin = max(1, n_min_xy//max_map_dim+1)
+    ret = map3d[nz//2-n_min_xy//2:nz//2+n_min_xy//2:bin, ny//2-n_min_xy//2:ny//2+n_min_xy//2:bin, nx//2-n_min_z//2:nx//2+n_min_z//2:bin]
     return ret, bin
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def auto_masking(map3d):
+    required_packages = "skimage:scikit_image".split()
+    import_with_auto_install(required_packages)
     from skimage.segmentation import watershed
     data = (map3d/map3d.max())
     data[data<0] = 0
@@ -1065,6 +1078,7 @@ def get_3d_map_from_uploaded_file(fileobj):
 @st.experimental_singleton(show_spinner=False)
 def get_emdb_ids():
     try:
+        import_with_auto_install(["pandas"])
         import pandas as pd
         entries = pd.read_csv("https://www.ebi.ac.uk/emdb/api/search/*%20AND%20structure_determination_method:%22helical%22?wt=csv&download=true&fl=emdb_id,resolution")
         emdb_ids = list(entries.iloc[:,0].str.split('-', expand=True).iloc[:, 1].values)
@@ -1082,6 +1096,7 @@ def get_emdb_parameters(emd_id):
     from urllib.request import urlopen
     with urlopen(url) as response:
       xml_data = response.read()
+    import_with_auto_install(["xmltodict"])
     import xmltodict
     data = xmltodict.parse(xml_data)
     helical_parameters = data['emdEntry']['experiment']['specimenPreparation']['helicalParameters']
@@ -1100,7 +1115,6 @@ def get_emdb_parameters(emd_id):
     ret = None
   return ret
 
-#@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_emdb_map(emdid):
     emdid_number = emdid.lower().split("emd-")[-1]
     server = "https://ftp.wwpdb.org/pub"    # Rutgers University, USA
@@ -1122,12 +1136,15 @@ def get_3d_map_from_url(url):
 
 #@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_3d_map_from_file(filename):
+    import_with_auto_install(["mrcfile"])
     import mrcfile
     data = None
     with mrcfile.open(filename) as mrc:
         apix = mrc.voxel_size.x.item()
         is3d = mrc.is_volume() or mrc.is_volume_stack()
-        data = mrc.data.astype(np.float32, copy=False)
+        data = mrc.data
+    del mrc
+    gc.collect(2)
     return data, apix
 
 @st.experimental_singleton(show_spinner=False)
@@ -1143,7 +1160,6 @@ def setup_anonymous_usage_tracking():
     except:
         pass
 
-#@st.experimental_memo()
 def is_hosted():
     import socket
     fqdn = socket.getfqdn()
@@ -1152,12 +1168,7 @@ def is_hosted():
     else:
         return False
 
-def print_memory_usage():
-    from inspect import currentframe
-    import psutil, os
-    cf = currentframe()
-    print(f'Line {cf.f_back.f_lineno}: {psutil.Process(os.getpid()).memory_info().rss / 1024 ** 2} MB')
-
 if __name__ == "__main__":
     setup_anonymous_usage_tracking()
     main()
+    gc.collect(2)
