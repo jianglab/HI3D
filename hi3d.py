@@ -86,7 +86,7 @@ def main():
             if max_map_size>0: label += f". {warning_map_size}"
             fileobj = st.file_uploader(label, type=['mrc', 'map', 'map.gz'])
             if fileobj is not None:
-                is_emd = fileobj.name.find("emd_")!=-1
+                is_emd = fileobj.name.find("emd_")!=-1 or fileobj.name.find(".map")!=-1 
                 data, apix = get_3d_map_from_uploaded_file(fileobj)
                 nz, ny, nx = data.shape
                 if nz<32:
@@ -98,7 +98,7 @@ def main():
             if max_map_size>0: help += f". {warning_map_size}"
             value = query_params["url"][0] if "url" in query_params else url_default
             url = st.text_input(label="Input the url of a 3D map:", value=value, help=help)
-            is_emd = url.find("emd_")!=-1
+            is_emd = url.find("emd_")!=-1 or url.find(".map")!=-1 
             with st.spinner(f'Downloading {url.strip()}'):
                 data, apix = get_3d_map_from_url(url.strip())
             nz, ny, nx = data.shape
@@ -112,6 +112,7 @@ def main():
                 return
             url = "https://www.ebi.ac.uk/emdb/search/*%20AND%20structure_determination_method:%22helical%22?rows=10&sort=release_date%20desc"
             st.markdown(f'[All {len(emdb_ids)} helical structures in EMDB]({url})')
+            emd_id_default = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
             do_random_embid = st.checkbox("Choose a random EMDB ID", value=False)
             if do_random_embid:
                 button_clicked = st.button(label="Change EMDB ID", help="Randomly select another helical structure in EMDB")
@@ -120,8 +121,8 @@ def main():
                     st.session_state.emd_id = 'emd-' + random.choice(emdb_ids)
             else:
                 label = "Input an EMDB ID (emd-xxxxx):"
-                if 'emd_id' in st.session_state: value=st.session_state.emd_id
-                else: value=query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
+                if 'emd_id' in st.session_state: value = st.session_state.emd_id
+                else: value = emd_id_default
                 emd_id = st.text_input(label=label, value=value, key='emd_id')
                 emd_id = emd_id.lower().split("emd-")[-1]
                 if emd_id not in emdb_ids:
@@ -130,7 +131,9 @@ def main():
                     emd_id = random.choice(emdb_ids)
                     st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')")
                     return
-            emd_id = st.session_state.emd_id.lower().split("emd-")[-1]
+            if 'emd_id' in st.session_state: emd_id = st.session_state.emd_id
+            else: emd_id = emd_id_default
+            emd_id = emd_id.lower().split("emd-")[-1]
             resolution = resolutions[emdb_ids.index(emd_id)]
             msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id}) | resolution={resolution}Å'
             params = get_emdb_parameters(emd_id)
@@ -171,7 +174,7 @@ def main():
                     nz, ny, nx = data.shape
                     st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
                 else:
-                    msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or clipping out the empty padding space around the structure, and then try again. If the crashing persists, please download the [HI3D server script](https://raw.githubusercontent.com/wjiang/HI3D/main/hi3d.py?token=AAOE77NYMWR4KRFI7D4DSVTBJU236) and run on your own computer to avoid the resource limit imposed by the free hosting service"
+                    msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or removing the empty padding space around the structure, and then try again. If the crashing persists, please download the [HI3D server script](https://raw.githubusercontent.com/wjiang/HI3D/main/hi3d.py?token=AAOE77NYMWR4KRFI7D4DSVTBJU236) and run on your own computer to avoid the resource limit imposed by the free hosting service"
                     msg_empty.warning(msg)
         
         section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
@@ -194,7 +197,7 @@ def main():
                 data = data * 1.0
                 data[data<thresh] = 0
 
-            do_transform = st.checkbox("Center & verticalize", value=(not is_emd))
+            do_transform = st.checkbox("Center & verticalize", value= not (is_emd or is_hosted()))
             if do_transform:
                 rotx_auto, shifty_auto = auto_vertical_center(np.sum(data, axis=2))
                 roty_auto, shiftx_auto = auto_vertical_center(np.sum(data, axis=1))
@@ -984,7 +987,7 @@ def transform_map(data, shift_x=0, shift_y=0, angle_x=0, angle_y=0):
     return ret
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
-def auto_vertical_center(image):
+def auto_vertical_center(image, max_angle=15):
     image_work = 1.0 * image
 
     # rough estimate of rotation
@@ -996,7 +999,7 @@ def auto_vertical_center(image):
         err = -np.sum(y_values)
         return err
     from scipy.optimize import minimize_scalar
-    res = minimize_scalar(score_rotation, bounds=(-90, 90), method='bounded', options={'disp':0})
+    res = minimize_scalar(score_rotation, bounds=(-max_angle, max_angle), method='bounded', options={'disp':0})
     angle = res.x
 
     # further refine rotation
