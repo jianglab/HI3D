@@ -40,6 +40,7 @@ import_with_auto_install(required_packages)
 
 import streamlit as st
 import numpy as np
+from scipy.ndimage import map_coordinates
 import math, random, gc
 gc.enable()
 
@@ -162,10 +163,6 @@ def main():
         nz, ny, nx = data.shape
         st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
 
-        if data.min() == data.max():
-            st.warning(f"The map is blank: min={data.min()} max={data.max()} mean={data.mean()} sigma={np.std(data)}. Please provide a valid 3D map")
-            st.stop()
-
         if max_map_size>0:
             map_size = nz*ny*nx*4 / pow(2, 20)
             if map_size>max_map_size:
@@ -173,8 +170,8 @@ def main():
                 if reduce_map_size:
                     data_small, bin = minimal_grids(data, max_map_dim)
                     del data
-                    gc.collect(2)
-                    data = data_small
+                    data = data_small * 1.0
+                    del data_small
                     apix *= bin
                     nz, ny, nx = data.shape
                     st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
@@ -182,6 +179,11 @@ def main():
                     msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or removing the empty padding space around the structure, and then try again. If the crashing persists, please download the [HI3D launcher script](https://purdue0-my.sharepoint.com/:u:/g/personal/jiang12_purdue_edu/EUZ58Ft3JA5IoJF_IcxnJvQBEsfEMEwXjV4eX7WXuuKtug?e=8YedWp&download=1) and run on your own computer to avoid the resource limit (512 MB memory cap) imposed by the free hosting service"
                     msg_empty.warning(msg)
         
+        vmin, vmax = data.min(), data.max()
+        if vmin == vmax:
+            st.warning(f"The map is blank: min={vmin} max={vmax}. Please provide a meaningful 3D map")
+            st.stop()
+
         section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
         mapping = {"X":(nx, 2), "Y":(ny, 1), "Z":(nz, 0)}
         n, axis = mapping[section_axis]
@@ -264,13 +266,13 @@ def main():
                 from bokeh.layouts import column
                 fig_image = column([fig3, fig1, fig2, fig4], sizing_mode='scale_width')
                 st.bokeh_chart(fig_image, use_container_width=True)
-                del fig_image
+                del fig_image, image, image2
         else:
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
                 fig_image = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
                 st.bokeh_chart(fig_image, use_container_width=True)
-                del fig_image
+                del fig_image, image
 
         rad_plot = st.empty()
 
@@ -289,6 +291,7 @@ def main():
         tooltips = [("r", "@x{0.0}Å"), ("val", "@y{0.0}"),]
         fig_radprofile = figure(title="density radial profile", x_axis_label="r (Å)", y_axis_label="pixel value", tools=tools, tooltips=tooltips, aspect_ratio=2)
         fig_radprofile.line(rad, radprofile, line_width=2, color='red')
+        del rad, radprofile
         
         from bokeh.models import Span
         rmin_span = Span(location=rmin, dimension='height', line_color='green', line_dash='dashed', line_width=3)
@@ -322,7 +325,6 @@ def main():
         #data = minimal_grids(data)
         cylproj = cylindrical_projection(data, da=da, dz=dz/apix, dr=1, rmin=rmin/apix, rmax=rmax/apix, interpolation_order=1)
         del data
-        gc.collect(2)
 
         cylproj_work = cylproj
         draw_cylproj_box = False
@@ -364,7 +366,9 @@ def main():
                     cylproj_work[z1:, :] = 0
 
         cylproj_square = make_square_shape(cylproj_work)
+        del cylproj_work
         acf = auto_correlation(cylproj_square, high_pass_fraction=1./cylproj_square.shape[0])
+        del cylproj_square
         show_acf = st.checkbox(label="ACF", value=True, help="Display the auto-correlation function (ACF)")
         if show_acf:
             show_peaks_empty = st.empty()
@@ -598,7 +602,6 @@ def consistent_twist_rise_cn_sets(twist_rise_cn_set_1, twist_rise_cn_set_2, epsi
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def refine_twist_rise(acf_image, twist, rise, cn):
-    from scipy.ndimage import map_coordinates
     from scipy.optimize import minimize
     if rise<=0: return twist, rise
 
@@ -904,7 +907,6 @@ def cylindrical_projection(map3d, da=1, dz=1, dr=1, rmin=0, rmax=-1, interpolati
     n_theta = len(theta)
     z = np.arange(max(0, nz//2-n_theta//2*dz), min(nz, nz//2+n_theta//2*dz), dz, dtype=np.float32)    # use only the central segment 
 
-    from scipy.ndimage.interpolation import map_coordinates
     cylindrical_proj = np.zeros((len(z), len(theta)), dtype=np.float32)
     for r in np.arange(rmin, rmax, dr, dtype=np.float32):
         z_grid, theta_grid = np.meshgrid(z, theta, indexing='ij', copy=False)
@@ -917,6 +919,7 @@ def cylindrical_projection(map3d, da=1, dz=1, dr=1, rmin=0, rmax=-1, interpolati
 
     return cylindrical_proj
 
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def minimal_grids(map3d, max_map_dim=300):
     nz, ny, nx = map3d.shape
     n_min_xy = min([ny, nx])
@@ -969,7 +972,6 @@ def compute_radial_profile(data):
 
     coords = np.vstack((y_grid.flatten(), x_grid.flatten()))
 
-    from scipy.ndimage.interpolation import map_coordinates
     polar = map_coordinates(proj, coords, order=1).reshape(r_grid.shape)
 
     rad_profile = polar.mean(axis=0)
@@ -1074,7 +1076,6 @@ def normalize(data, percentile=(0, 100)):
     data2 = (data-vmin)/(vmax-vmin)
     return data2
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_3d_map_from_uploaded_file(fileobj):
     import os, tempfile
     orignal_filename = fileobj.name
@@ -1132,7 +1133,7 @@ def get_emdb_map(emdid):
     data = get_3d_map_from_url(url)
     return data
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.experimental_singleton(show_spinner=False)
 def get_3d_map_from_url(url):
     ds = np.DataSource(None)
     if not ds.exists(url):
@@ -1142,17 +1143,19 @@ def get_3d_map_from_url(url):
         data = get_3d_map_from_file(fp.name)
     return data
 
-#@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_3d_map_from_file(filename):
-    import_with_auto_install(["mrcfile"])
+    if filename.endswith(".gz"):
+        filename_final = filename[:-3]
+        import gzip, shutil
+        with gzip.open(filename, 'r') as f_in, open(filename_final, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    else:
+        filename_final = filename
     import mrcfile
-    data = None
-    with mrcfile.open(filename) as mrc:
+    with mrcfile.mmap(filename_final) as mrc:
         apix = mrc.voxel_size.x.item()
         is3d = mrc.is_volume() or mrc.is_volume_stack()
         data = mrc.data
-    del mrc
-    gc.collect(2)
     return data, apix
 
 @st.experimental_singleton(show_spinner=False)
