@@ -55,8 +55,8 @@ def main():
     st.elements.utils._shown_default_value_warning = True
     
     if is_hosted():
-        max_map_size = 100    # MB
-        max_map_dim  = 300   # pixels in any dimension
+        max_map_size = 256    # MB
+        max_map_dim  = 400   # pixels in any dimension
     else:
         max_map_size = -1   # no limit
         max_map_dim  = -1
