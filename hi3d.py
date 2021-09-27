@@ -55,8 +55,9 @@ def main():
     st.elements.utils._shown_default_value_warning = True
     
     if is_hosted():
-        max_map_size = 256    # MB
-        max_map_dim  = 400   # pixels in any dimension
+        max_map_size  = 256    # MB
+        max_map_dim   = 400    # pixels in any dimension
+        stop_map_size = 500    # MB
     else:
         max_map_size = -1   # no limit
         max_map_dim  = -1
@@ -165,7 +166,11 @@ def main():
 
         if max_map_size>0:
             map_size = nz*ny*nx*4 / pow(2, 20)
-            if map_size>max_map_size:
+            if map_size>stop_map_size:
+                msg= f"As the map size ({map_size:1} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit (512 MB memory cap) of the free hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
+                msg_empty.warning(msg)
+                st.stop()
+            elif map_size>max_map_size:
                 reduce_map_size = st.checkbox(f"Reduce map size to < {max_map_size} MB", value=True)
                 if reduce_map_size:
                     data_small, bin = minimal_grids(data, max_map_dim)
@@ -176,7 +181,7 @@ def main():
                     nz, ny, nx = data.shape
                     st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
                 else:
-                    msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or removing the empty padding space around the structure, and then try again. If the crashing persists, please download the [HI3D launcher script](https://purdue0-my.sharepoint.com/:u:/g/personal/jiang12_purdue_edu/EUZ58Ft3JA5IoJF_IcxnJvQBEsfEMEwXjV4eX7WXuuKtug?e=8YedWp&download=1) and run on your own computer to avoid the resource limit (512 MB memory cap) imposed by the free hosting service"
+                    msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or removing the empty padding space around the structure, and then try again. If the crashing persists, please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
                     msg_empty.warning(msg)
         
         vmin, vmax = data.min(), data.max()
@@ -305,7 +310,7 @@ def main():
 
         set_url = st.button("Get a sharable link", help="Click to make the URL a sharable link")
 
-        st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
+        st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
 
         hide_streamlit_style = """
         <style>
