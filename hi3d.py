@@ -311,6 +311,7 @@ def main():
         set_url = st.button("Get a sharable link", help="Click to make the URL a sharable link")
 
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
+        if is_hosted(): st.write("Server:", uptime())
 
         hide_streamlit_style = """
         <style>
@@ -318,7 +319,7 @@ def main():
         footer {visibility: hidden;}
         </style>
         """
-        st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
+        st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
     with col3:
         da = st.number_input('Angular step size (°)', value=da_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the azimuthal angle step size for the computation of the cylindric projection")
@@ -1175,6 +1176,15 @@ def setup_anonymous_usage_tracking():
             index_file.write_text(txt)
     except:
         pass
+
+def uptime():
+    from os import popen
+    ret = popen('uptime -p').read()[:-1]
+    if len(ret): return ret
+    ret = popen('uptime').read()[:-1]
+    ret = ret[ret.find("up"):]
+    ret = ret[:ret.find("users")].rsplit(",",1)[0]
+    return ret
 
 def is_hosted():
     import socket
