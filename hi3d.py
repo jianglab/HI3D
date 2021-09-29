@@ -1180,13 +1180,11 @@ def setup_anonymous_usage_tracking():
 
 def uptime():
     from os import popen
-    ret = popen('uptime -p').read()[:-1]
+    ret = popen('/usr/bin/uptime -p').read()[:-1]
     if len(ret): return ret
-    ret = popen('uptime').read()[:-1]
+    ret = popen('/usr/bin/uptime').read()[:-1]
     ret = ret[ret.find("up"):]
     ret = ret[:ret.find("users")].rsplit(",",1)[0]
-    if len(ret): return ret
-    ret = popen('uptime').read()[:-1]
     return ret
 
 def get_username():
@@ -1200,7 +1198,8 @@ def get_hostname():
 
 def is_hosted():
     fqdn = get_hostname()
-    if fqdn.find("heroku")!=-1 or fqdn.find("streamlit")!=-1:
+    username = get_username()
+    if fqdn.find("heroku")!=-1 or username.find("appuser")!=-1:
         return True
     else:
         return False
