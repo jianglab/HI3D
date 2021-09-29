@@ -55,14 +55,14 @@ def main():
     st.elements.utils._shown_default_value_warning = True
     
     if is_hosted():
-        max_map_size  = 256    # MB
-        max_map_dim   = 400    # pixels in any dimension
-        stop_map_size = 500    # MB
+        max_map_size  = mem_quota()/2    # MB
+        max_map_dim   = int(pow(max_map_size*pow(2, 20)/4, 1./3.)//10*10)    # pixels in any dimension
+        stop_map_size = mem_quota()*0.75 # MB
     else:
         max_map_size = -1   # no limit
         max_map_dim  = -1
     if max_map_size>0:
-        warning_map_size = f"Due to the resource limit (512 MB memory cap) of the free hosting service, the maximal map size should be {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less to avoid crashing the server process"
+        warning_map_size = f"Due to the resource limit ({mem_quota():.1f} MB memory cap) of the free hosting service, the maximal map size should be {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less to avoid crashing the server process"
 
     col1, col2, col3, col4 = st.columns((1.0, 3.2, 0.6, 1.15))
 
@@ -167,7 +167,7 @@ def main():
         if max_map_size>0:
             map_size = nz*ny*nx*4 / pow(2, 20)
             if map_size>stop_map_size:
-                msg= f"As the map size ({map_size:.1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit (512 MB memory cap) of the free hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
+                msg= f"As the map size ({map_size:.1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit ({mem_quota():.1f} MB memory cap) of the free hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
                 msg_empty.warning(msg)
                 st.stop()
             elif map_size>max_map_size:
@@ -181,7 +181,7 @@ def main():
                     nz, ny, nx = data.shape
                     st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
                 else:
-                    msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or removing the empty padding space around the structure, and then try again. If the crashing persists, please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
+                    msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or cropping the empty padding space around the structure, and then try again. If the crashing persists, please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
                     msg_empty.warning(msg)
         
         vmin, vmax = data.min(), data.max()
