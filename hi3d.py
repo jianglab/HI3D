@@ -167,7 +167,7 @@ def main():
         if max_map_size>0:
             map_size = nz*ny*nx*4 / pow(2, 20)
             if map_size>stop_map_size:
-                msg= f"As the map size ({map_size:1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit (512 MB memory cap) of the free hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
+                msg= f"As the map size ({map_size:.1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit (512 MB memory cap) of the free hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
                 msg_empty.warning(msg)
                 st.stop()
             elif map_size>max_map_size:
