@@ -311,7 +311,7 @@ def main():
         set_url = st.button("Get a sharable link", help="Click to make the URL a sharable link")
 
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
-        if is_hosted(): st.write("Server:", uptime())
+        st.write(f"Server: {get_hostname()}, {uptime()}")
 
         hide_streamlit_style = """
         <style>
@@ -630,6 +630,7 @@ def refine_twist_rise(acf_image, twist, rise, cn):
         return score    
     res = minimize(score, (twist, rise), method='nelder-mead', options={'xatol': 1e-4, 'adaptive': True})
     twist_opt, rise_opt = res.x
+    twist_opt = set_to_periodic_range(twist_opt, min=-180, max=180)
     return twist_opt, rise_opt
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False, suppress_st_warning=True)
@@ -1186,13 +1187,24 @@ def uptime():
     ret = ret[:ret.find("users")].rsplit(",",1)[0]
     return ret
 
-def is_hosted():
+def get_hostname():
     import socket
     fqdn = socket.getfqdn()
+    return fqdn
+
+def is_hosted():
+    fqdn = get_hostname()
     if fqdn.find("heroku")!=-1 or fqdn.find("streamlit")!=-1:
         return True
     else:
         return False
+
+def set_to_periodic_range(v, min=-180, max=180):
+    from math import fmod
+    tmp = fmod(v-min, max-min)
+    if tmp>=0: tmp+=min
+    else: tmp+=max
+    return tmp
 
 if __name__ == "__main__":
     setup_anonymous_usage_tracking()
