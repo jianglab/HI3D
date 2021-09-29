@@ -502,10 +502,9 @@ def main():
         st.experimental_set_query_params()
 
     with server_info_empty:
-        total, _, used, _ = ram_size()
         msg = f"Host: {get_hostname()}  \n"
-        msg+= f"Total mem: {total:.1f} MB  \n"
-        msg+= f"Used mem: {used:.1f} MB  \n"
+        #msg+= f"Mem (total): {ram_size()[0]:.1f} MB  \n"
+        msg+= f"Mem (quota): {mem_quota():.1f} MB  \n"
         msg+= f"Uptime: {uptime():.1f} s  \n"
         msg+= f"Account: {get_username()}"
         st.markdown(msg)
@@ -1194,6 +1193,16 @@ def ram_size():
     mem = virtual_memory()
     mb = pow(2, 20)
     return (mem.total/mb, mem.available/mb, mem.used/mb, mem.percent)
+
+def mem_quota():
+    fqdn = get_hostname()
+    if fqdn.find("heroku")!=-1:
+        return 512  # MB
+    username = get_username()
+    if username.find("appuser")!=-1:    # streamlit share
+        return 800  # MB
+    available_mem = ram_size()[1]
+    return available_mem
 
 def uptime():
     import_with_auto_install(["uptime"])
