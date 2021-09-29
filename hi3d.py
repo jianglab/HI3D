@@ -311,7 +311,7 @@ def main():
         set_url = st.button("Get a sharable link", help="Click to make the URL a sharable link")
 
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
-        st.write(f"Server: {get_hostname()}, {uptime()}")
+        st.markdown(f"Account: {get_username()}  \nServer: {get_hostname()} {uptime()}")
 
         hide_streamlit_style = """
         <style>
@@ -1185,7 +1185,13 @@ def uptime():
     ret = popen('uptime').read()[:-1]
     ret = ret[ret.find("up"):]
     ret = ret[:ret.find("users")].rsplit(",",1)[0]
+    if len(ret): return ret
+    ret = popen('uptime').read()[:-1]
     return ret
+
+def get_username():
+    from getpass import getuser
+    return getuser()
 
 def get_hostname():
     import socket
