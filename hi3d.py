@@ -307,11 +307,10 @@ def main():
         with rad_plot:
             st.bokeh_chart(fig_radprofile, use_container_width=True)
             del fig_radprofile
+        
+        server_info_empty = st.expander(label="Server info", expanded=False)
 
         set_url = st.button("Get a sharable link", help="Click to make the URL a sharable link")
-
-        st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
-        st.markdown(f"Account: {get_username()}  \nServer: {get_hostname()}  \nUptime: {uptime()} s")
 
         hide_streamlit_style = """
         <style>
@@ -490,6 +489,8 @@ def main():
         del fig_indexing
         del acf
 
+        st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
+
     if set_url:
         if input_mode in [2, 3]:
             st.experimental_set_query_params(input_mode=input_mode, emdid=f"emd-{emd_id}")
@@ -499,6 +500,15 @@ def main():
             st.experimental_set_query_params()
     else:
         st.experimental_set_query_params()
+
+    with server_info_empty:
+        total, _, used, _ = ram_size()
+        msg = f"Host: {get_hostname()}  \n"
+        msg+= f"Total mem: {total:.1f} MB  \n"
+        msg+= f"Used mem: {used:.1f} MB  \n"
+        msg+= f"Uptime: {uptime():.1f} s  \n"
+        msg+= f"Account: {get_username()}"
+        st.markdown(msg)
 
 def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, x_axis_label='x', y_axis_label='y', tooltips=None, show_axis=True, show_toolbar=True, crosshair_color="white", aspect_ratio=None):
     from bokeh.plotting import figure
@@ -1177,6 +1187,13 @@ def setup_anonymous_usage_tracking():
             index_file.write_text(txt)
     except:
         pass
+
+def ram_size():
+    import_with_auto_install(["psutil"])
+    from psutil import virtual_memory
+    mem = virtual_memory()
+    mb = pow(2, 20)
+    return (mem.total/mb, mem.available/mb, mem.used/mb, mem.percent)
 
 def uptime():
     import_with_auto_install(["uptime"])
