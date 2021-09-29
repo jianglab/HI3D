@@ -167,7 +167,7 @@ def main():
         if max_map_size>0:
             map_size = nz*ny*nx*4 / pow(2, 20)
             if map_size>stop_map_size:
-                msg= f"As the map size ({map_size:1} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit (512 MB memory cap) of the free hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
+                msg= f"As the map size ({map_size:1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit (512 MB memory cap) of the free hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
                 msg_empty.warning(msg)
                 st.stop()
             elif map_size>max_map_size:
@@ -311,7 +311,7 @@ def main():
         set_url = st.button("Get a sharable link", help="Click to make the URL a sharable link")
 
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
-        st.markdown(f"Account: {get_username()}  \nServer: {get_hostname()} {uptime()}")
+        st.markdown(f"Account: {get_username()}  \nServer: {get_hostname()}  \nUptime: {uptime()} s")
 
         hide_streamlit_style = """
         <style>
@@ -1179,13 +1179,9 @@ def setup_anonymous_usage_tracking():
         pass
 
 def uptime():
-    from os import popen
-    ret = popen('/usr/bin/uptime -p').read()[:-1]
-    if len(ret): return ret
-    ret = popen('/usr/bin/uptime').read()[:-1]
-    ret = ret[ret.find("up"):]
-    ret = ret[:ret.find("users")].rsplit(",",1)[0]
-    return ret
+    import_with_auto_install(["uptime"])
+    from uptime import uptime
+    return uptime()
 
 def get_username():
     from getpass import getuser
