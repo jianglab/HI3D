@@ -308,7 +308,15 @@ def main():
             st.bokeh_chart(fig_radprofile, use_container_width=True)
             del fig_radprofile
         
-        server_info_empty = st.expander(label="Server info", expanded=False)
+        with st.expander(label="Server info", expanded=False):
+            server_info_empty = st.empty()
+            #server_info = f"Host: {get_hostname()}  \n"
+            #server_info+= f"Account: {get_username()}"
+            server_info = f"Uptime: {uptime():.1f} s  \n"
+            server_info+= f"Mem (total): {mem_info()[0]:.1f} MB  \n"
+            server_info+= f"Mem (quota): {mem_quota():.1f} MB  \n"
+            server_info+= "Mem (used): {mem_used:.1f} MB"
+            server_info_empty.markdown(server_info.format(mem_used=mem_used()))
 
         set_url = st.button("Get a sharable link", help="Click to make the URL a sharable link")
 
@@ -330,6 +338,7 @@ def main():
         #data = minimal_grids(data)
         cylproj = cylindrical_projection(data, da=da, dz=dz/apix, dr=1, rmin=rmin/apix, rmax=rmax/apix, interpolation_order=1)
         del data
+        server_info_empty.markdown(server_info.format(mem_used=mem_used()))
 
         cylproj_work = cylproj
         draw_cylproj_box = False
@@ -384,6 +393,7 @@ def main():
             npeaks = int(npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)"))
 
         show_arrow_empty = st.empty()
+        server_info_empty.markdown(server_info.format(mem_used=mem_used()))
         
     with col4:
         if show_cylproj:
@@ -434,6 +444,7 @@ def main():
         twist_empty = st.empty()
         rise_empty = st.empty()
         csym_empty = st.empty()
+        server_info_empty.markdown(server_info.format(mem_used=mem_used()))
 
     with col2:
         h, w = acf.shape
@@ -501,13 +512,7 @@ def main():
     else:
         st.experimental_set_query_params()
 
-    with server_info_empty:
-        msg = f"Host: {get_hostname()}  \n"
-        #msg+= f"Mem (total): {ram_size()[0]:.1f} MB  \n"
-        msg+= f"Mem (quota): {mem_quota():.1f} MB  \n"
-        msg+= f"Uptime: {uptime():.1f} s  \n"
-        msg+= f"Account: {get_username()}"
-        st.markdown(msg)
+    server_info_empty.markdown(server_info.format(mem_used=mem_used()))
 
 def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, x_axis_label='x', y_axis_label='y', tooltips=None, show_axis=True, show_toolbar=True, crosshair_color="white", aspect_ratio=None):
     from bokeh.plotting import figure
@@ -1187,7 +1192,7 @@ def setup_anonymous_usage_tracking():
     except:
         pass
 
-def ram_size():
+def mem_info():
     import_with_auto_install(["psutil"])
     from psutil import virtual_memory
     mem = virtual_memory()
@@ -1201,8 +1206,15 @@ def mem_quota():
     username = get_username()
     if username.find("appuser")!=-1:    # streamlit share
         return 800  # MB
-    available_mem = ram_size()[1]
+    available_mem = mem_info()[1]
     return available_mem
+
+def mem_used():
+    import_with_auto_install(["psutil"])
+    from psutil import Process
+    from os import getpid
+    mem = Process(getpid()).memory_info().rss / 1024**2   # MB
+    return mem
 
 def uptime():
     import_with_auto_install(["uptime"])
