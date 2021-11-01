@@ -144,9 +144,9 @@ def main():
             resolution = resolutions[emdb_ids.index(emd_id)]
             msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id}) | resolution={resolution}Å'
             params = get_emdb_parameters(emd_id)
-            if params and abs(params['rise'])<5 and ((abs(params['twist']))<5 or (abs(params['twist'])>175)):
+            if params and is_amyloid(params, cutoff=6):
                 dz_auto = 0.2
-            if params:
+            if params and "twist" in params and "rise" in params:
                 msg += f"  \ntwist={params['twist']}° | rise={params['rise']}Å | c{params['csym']}"
             else:
                 msg +=  "  \n*helical params not available*"
@@ -330,7 +330,7 @@ def main():
 
     with col3:
         da = st.number_input('Angular step size (°)', value=da_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the azimuthal angle step size for the computation of the cylindric projection")
-        dz = st.number_input('Axial step size (Å)', value=dz_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the axial step size for the computation of the cylindric projection. Use a smaller step size (such as 0.2) for a helical structure with small rise")
+        dz = st.number_input('Axial step size (Å)', value=dz_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the axial step size for the computation of the cylindric projection. Use a smaller step size (such as 0.2 Å) for a helical structure with small rise (such as a protein fibril with rise ~2.3-2.4 Å or ~4.7-4.8 Å)")
 
         npeaks_empty = st.empty()
         
@@ -1120,30 +1120,49 @@ def get_emdb_ids():
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_emdb_parameters(emd_id):
-  try:
-    emd_id2 = ''.join([s for s in str(emd_id) if s.isdigit()])
-    url = f"https://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-{emd_id2}/header/emd-{emd_id2}.xml"
-    from urllib.request import urlopen
-    with urlopen(url) as response:
-      xml_data = response.read()
-    import_with_auto_install(["xmltodict"])
-    import xmltodict
-    data = xmltodict.parse(xml_data)
-    helical_parameters = data['emdEntry']['experiment']['specimenPreparation']['helicalParameters']
-    assert(helical_parameters['deltaPhi']['@units'] == 'degrees')
-    assert(helical_parameters['deltaZ']['@units'] == 'A')
+    try:
+        emd_id2 = ''.join([s for s in str(emd_id) if s.isdigit()])
+        url = f"https://ftp.ebi.ac.uk/pub/databases/emdb/structures/EMD-{emd_id2}/header/emd-{emd_id2}.xml"
+        from urllib.request import urlopen
+        with urlopen(url) as response:
+            xml_data = response.read()
+        import_with_auto_install(["xmltodict"])
+        import xmltodict
+        data = xmltodict.parse(xml_data)
+    except:
+        return None
     ret = {}
-    ret["twist"] = float(helical_parameters['deltaPhi']['#text'])
-    ret["rise"] = float(helical_parameters['deltaZ']['#text'])
-    ret["csym"] = int(helical_parameters['axialSymmetry'][1:])
-    ret["resolution"] = float(data['emdEntry']['processing']['reconstruction']['resolutionByAuthor'])
-    dimensions = data['emdEntry']['map']['dimensions']
-    ret["nz"] = int(dimensions["numSections"])
-    ret["ny"] = int(dimensions["numRows"])
-    ret["nx"] = int(dimensions["numColumns"])
-  except:
-    ret = None
-  return ret
+    try:
+        ret['sample'] = data['emdEntry']['sample']['name']
+        ret["resolution"] = float(data['emdEntry']['processing']['reconstruction']['resolutionByAuthor'])
+        dimensions = data['emdEntry']['map']['dimensions']
+        ret["nz"] = int(dimensions["numSections"])
+        ret["ny"] = int(dimensions["numRows"])
+        ret["nx"] = int(dimensions["numColumns"])
+        helical_parameters = data['emdEntry']['experiment']['specimenPreparation']['helicalParameters']
+        assert(helical_parameters['deltaPhi']['@units'] == 'degrees')
+        assert(helical_parameters['deltaZ']['@units'] == 'A')
+        ret["twist"] = float(helical_parameters['deltaPhi']['#text'])
+        ret["rise"] = float(helical_parameters['deltaZ']['#text'])
+        ret["csym"] = int(helical_parameters['axialSymmetry'][1:])
+    except:
+        pass
+    return ret
+
+def is_amyloid(params, cutoff=6):
+    if "twist" in params and "rise" in params:
+        twist = params["twist"]
+        rise = params["rise"]
+        r = np.hypot(twist, rise)
+        if r<cutoff: return True
+        twist2 = abs(twist)-180
+        r = np.hypot(twist2, rise)
+        if r<cutoff: return True
+    if "sample" in params:
+        sample = params["sample"].lower()
+        for target in "tau synuclein amyloid tdp-43".split():
+            if sample.find(target)!=-1: return True
+    return False
 
 def get_emdb_map(emdid):
     emdid_number = emdid.lower().split("emd-")[-1]
