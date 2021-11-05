@@ -1224,7 +1224,7 @@ def mem_quota():
         return 512  # MB
     username = get_username()
     if username.find("appuser")!=-1:    # streamlit share
-        return 800  # MB
+        return 1024  # MB
     available_mem = mem_info()[1]
     return available_mem
 
