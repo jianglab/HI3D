@@ -188,9 +188,10 @@ def main():
             st.warning(f"The map is blank: min={vmin} max={vmax}. Please provide a meaningful 3D map")
             st.stop()
 
-        section_axis = st.radio(label="Display a section along this axis:", options="X Y Z".split(), index=0)
-        mapping = {"X":(nx, 2), "Y":(ny, 1), "Z":(nz, 0)}
-        n, axis = mapping[section_axis]
+        axis_mapping = {0:'X', 1:'Y', 2:'Z'}
+        section_axis = st.radio(label="Display a section along this axis:", options=list(axis_mapping.keys()), format_func=lambda i:axis_mapping[i], index=0, key="section_axis")
+        mapping = {0:nx, 1:ny, 2:nz}
+        n = mapping[section_axis]
         section_index = st.slider(label="Choose a section to display:", min_value=1, max_value=n, value=n//2+1, step=1)
         container_image = st.container()
         
@@ -219,11 +220,11 @@ def main():
             else:
                 rotx, roty, shiftx, shifty = 0., 0., 0., 0.
 
-        image = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
+        image = np.squeeze(np.take(data, indices=[section_index-1], axis=section_axis))
         h, w = image.shape
         if thresh is not None or rotx or roty or shiftx or shifty:
             data = transform_map(data, shift_x=shiftx/apix, shift_y=-shifty/apix, angle_x=-rotx, angle_y=-roty)
-            image2 = np.squeeze(np.take(data, indices=[section_index-1], axis=axis))
+            image2 = np.squeeze(np.take(data, indices=[section_index-1], axis=section_axis))
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
                 fig1 = generate_bokeh_figure(image, apix, apix, title=f"Original", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
@@ -1192,9 +1193,9 @@ def get_3d_map_from_file(filename):
         data = mrc.data
     return data, apix
 
-int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'share_url', 'show_acf', 'show_arrow', 'show_cylproj', 'show_peaks']
+int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_arrow', 'show_cylproj', 'show_peaks']
 float_types = ['ang_max', 'ang_min', 'da', 'dz', 'rise', 'rmax', 'rmin', 'twist', 'z_max', 'z_min']
-default_values = {'csym':1, 'do_threshold':1, 'do_transform':0, 'input_mode':2, 'random_embid':1, 'share_url':0, 'show_acf':1, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'z_max':-180., 'z_min':180.}
+default_values = {'csym':1, 'do_threshold':1, 'do_transform':0, 'input_mode':2, 'random_embid':1, 'section_axis':0, 'share_url':0, 'show_acf':1, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'z_max':-180., 'z_min':180.}
 def set_query_parameters():
     d = {}
     for k in st.session_state:
