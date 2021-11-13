@@ -51,8 +51,10 @@ def main():
     st.set_page_config(page_title=title, layout="wide")
     st.title(title)
 
-    query_params = st.experimental_get_query_params()
     st.elements.utils._shown_default_value_warning = True
+
+    if "input_mode" not in st.session_state:  # only run once at the start of the session
+        parse_query_parameters()
     
     if is_hosted():
         max_map_size  = mem_quota()/2    # MB
@@ -78,16 +80,15 @@ def main():
         # make radio display horizontal
         st.markdown('<style>div.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
         input_modes = {0:"upload", 1:"url", 2:"emd-xxxxx"}
-        value = int(query_params["input_mode"][0]) if "input_mode" in query_params else 2
         help = "Only maps in MRC (*\*.mrc*) or CCP4 (*\*.map*) format are supported. Compressed maps (*\*.gz*) will be automatically decompressed"
         if max_map_size>0: help += f". {warning_map_size}"
-        input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=value, help=help)
+        input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=2, help=help, key="input_mode")
         is_emd = False
         if input_mode == 0: # "upload a MRC file":
             label = "Upload a map in MRC or CCP4 format"
             help = None
             if max_map_size>0: help = warning_map_size
-            fileobj = st.file_uploader(label, type=['mrc', 'map', 'map.gz'], help=help)
+            fileobj = st.file_uploader(label, type=['mrc', 'map', 'map.gz'], help=help, key="file_upload")
             if fileobj is not None:
                 is_emd = fileobj.name.find("emd_")!=-1 or fileobj.name.find(".map")!=-1 
                 data, apix = get_3d_map_from_uploaded_file(fileobj)
@@ -99,8 +100,7 @@ def main():
             url_default = "https://ftp.wwpdb.org/pub/emdb/structures/EMD-10499/map/emd_10499.map.gz"
             help = "An online url (http:// or ftp://) or a local file path (/path/to/your/structure.mrc)"
             if max_map_size>0: help += f". {warning_map_size}"
-            value = query_params["url"][0] if "url" in query_params else url_default
-            url = st.text_input(label="Input the url of a 3D map:", value=value, help=help)
+            url = st.text_input(label="Input the url of a 3D map:", value=url_default, help=help, key="url")
             is_emd = url.find("emd_")!=-1 or url.find(".map")!=-1 
             with st.spinner(f'Downloading {url.strip()}'):
                 data, apix = get_3d_map_from_url(url.strip())
@@ -115,8 +115,8 @@ def main():
                 return
             url = "https://www.ebi.ac.uk/emdb/search/*%20AND%20structure_determination_method:%22helical%22?rows=10&sort=release_date%20desc"
             st.markdown(f'[All {len(emdb_ids)} helical structures in EMDB]({url})')
-            emd_id_default = query_params["emdid"][0] if "emdid" in query_params else "emd-10499"
-            do_random_embid = st.checkbox("Choose a random EMDB ID", value=False)
+            emd_id_default = "emd-10499"
+            do_random_embid = st.checkbox("Choose a random EMDB ID", value=False, key="random_embid")
             if do_random_embid:
                 help = "Randomly select another helical structure in EMDB"
                 if max_map_size>0: help += f". {warning_map_size}"
@@ -128,9 +128,7 @@ def main():
                 help = None
                 if max_map_size>0: help = warning_map_size
                 label = "Input an EMDB ID (emd-xxxxx):"
-                if 'emd_id' in st.session_state: value = st.session_state.emd_id
-                else: value = emd_id_default
-                emd_id = st.text_input(label=label, value=value, key='emd_id', help=help)
+                emd_id = st.text_input(label=label, value=emd_id_default, key='emd_id', help=help)
                 emd_id = emd_id.lower().split("emd-")[-1]
                 if emd_id not in emdb_ids:
                     emd_id_bad = emd_id
@@ -147,7 +145,8 @@ def main():
             if params and is_amyloid(params, cutoff=6):
                 dz_auto = 0.2
             if params and "twist" in params and "rise" in params:
-                msg += f"  \ntwist={params['twist']}° | rise={params['rise']}Å | c{params['csym']}"
+                msg += f"  \ntwist={params['twist']}° | rise={params['rise']}Å"
+                if "csym" in params: msg += f" | c{params['csym']}"
             else:
                 msg +=  "  \n*helical params not available*"
             st.markdown(msg)
@@ -171,7 +170,7 @@ def main():
                 msg_empty.warning(msg)
                 st.stop()
             elif map_size>max_map_size:
-                reduce_map_size = st.checkbox(f"Reduce map size to < {max_map_size} MB", value=True)
+                reduce_map_size = st.checkbox(f"Reduce map size to < {max_map_size} MB", value=True, key="reduce_map_size")
                 if reduce_map_size:
                     data_small, bin = minimal_grids(data, max_map_dim)
                     del data
@@ -197,26 +196,26 @@ def main():
         
         expanded = False if is_emd else True
         with st.expander(label="Transform the map", expanded=expanded):
-            do_threshold = st.checkbox("Threshold the map", value=False)
+            do_threshold = st.checkbox("Threshold the map", value=False, key="do_threshold")
             if do_threshold:
                 data_min, data_max = float(data.min()), float(data.max())
                 background = np.mean(data[[0,1,2,-3,-2,-1],[0,1,2,-3,-2,-1]])
                 thresh_auto = (data_max-background) * 0.2 + background
-                thresh = st.number_input(label="Minimal voxel value:", min_value=data_min, max_value=data_max, value=float(round(thresh_auto,6)), step=float((data_max-data_min)/1000.), format="%g")
+                thresh = st.number_input(label="Minimal voxel value:", min_value=data_min, max_value=data_max, value=float(round(thresh_auto,6)), step=float((data_max-data_min)/1000.), format="%g", key="thresh")
             else:
                 thresh = None
             if thresh is not None:
                 data = data * 1.0
                 data[data<thresh] = 0
 
-            do_transform = st.checkbox("Center & verticalize", value= not (is_emd or is_hosted()))
+            do_transform = st.checkbox("Center & verticalize", value= not (is_emd or is_hosted()), key="do_transform")
             if do_transform:
                 rotx_auto, shifty_auto = auto_vertical_center(np.sum(data, axis=2))
                 roty_auto, shiftx_auto = auto_vertical_center(np.sum(data, axis=1))
-                rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=round(rotx_auto,2), step=1.0, format="%g")
-                roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=round(roty_auto,2), step=1.0, format="%g")
-                shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(shiftx_auto*apix,2), step=1.0, format="%g")
-                shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=round(shifty_auto*apix,2), step=1.0, format="%g")
+                rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=round(rotx_auto,2), step=1.0, format="%g", key="rotx")
+                roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=round(roty_auto,2), step=1.0, format="%g", key="roty")
+                shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(shiftx_auto*apix,2), step=1.0, format="%g", key="shiftx")
+                shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=round(shifty_auto*apix,2), step=1.0, format="%g", key="shifty")
             else:
                 rotx, roty, shiftx, shifty = 0., 0., 0., 0.
 
@@ -285,8 +284,8 @@ def main():
             radprofile = compute_radial_profile(data)
             rad = np.arange(len(radprofile)) * apix
             rmin_auto, rmax_auto = estimate_radial_range(radprofile, thresh_ratio=0.1)
-            rmin = st.number_input('Minimal radius (Å)', value=round(rmin_auto*apix,1), min_value=0.0, max_value=round(nx//2*apix,1), step=1.0, format="%g")
-            rmax = st.number_input('Maximal radius (Å)', value=round(rmax_auto*apix,1), min_value=0.0, max_value=round(nx//2*apix,1), step=1.0, format="%g")
+            rmin = st.number_input('Minimal radius (Å)', value=round(rmin_auto*apix,1), min_value=0.0, max_value=round(nx//2*apix,1), step=1.0, format="%g", key="rmin")
+            rmax = st.number_input('Maximal radius (Å)', value=round(rmax_auto*apix,1), min_value=0.0, max_value=round(nx//2*apix,1), step=1.0, format="%g", key="rmax")
             if rmax<=rmin:
                 st.warning(f"rmax(={rmax}) should be larger than rmin(={rmin})")
                 return
@@ -318,7 +317,7 @@ def main():
             server_info+= "Mem (used): {mem_used:.1f} MB"
             server_info_empty.markdown(server_info.format(mem_used=mem_used()))
 
-        set_url = st.button("Get a sharable link", help="Click to make the URL a sharable link")
+        share_url = st.checkbox('Show sharable URL', value=False, help="Include relevant parameters in the browser URL to allow you to share the URL and reproduce the plots", key="share_url")
 
         hide_streamlit_style = """
         <style>
@@ -329,8 +328,8 @@ def main():
         st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
     with col3:
-        da = st.number_input('Angular step size (°)', value=da_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the azimuthal angle step size for the computation of the cylindric projection")
-        dz = st.number_input('Axial step size (Å)', value=dz_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the axial step size for the computation of the cylindric projection. Use a smaller step size (such as 0.2 Å) for a helical structure with small rise (such as a protein fibril with rise ~2.3-2.4 Å or ~4.7-4.8 Å)")
+        da = st.number_input('Angular step size (°)', value=da_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the azimuthal angle step size for the computation of the cylindric projection", key="da")
+        dz = st.number_input('Axial step size (Å)', value=dz_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the axial step size for the computation of the cylindric projection. Use a smaller step size (such as 0.2 Å) for a helical structure with small rise (such as a protein fibril with rise ~2.3-2.4 Å or ~4.7-4.8 Å)", key="dz")
 
         npeaks_empty = st.empty()
         
@@ -344,13 +343,13 @@ def main():
         draw_cylproj_box = False
 
         st.subheader("Display:")
-        show_cylproj = st.checkbox(label="Cylindrical projection", value=True, help="Display the cylindric projection")
+        show_cylproj = st.checkbox(label="Cylindrical projection", value=True, help="Display the cylindric projection", key="show_cylproj")
         if show_cylproj:
             nz, na = cylproj.shape
-            ang_min = st.number_input('Minimal angle (°)', value=-180., min_value=-180.0, max_value=180., step=1.0, format="%g", help="Set the minimal azimuthal angle of the cylindric projection to be included to compute the auto-correlation function")
-            ang_max = st.number_input('Maximal angle (°)', value=180., min_value=-180.0, max_value=180., step=1.0, format="%g", help="Set the maximal azimuthal angle of the cylindric projection to be included to compute the auto-correlation function. If this angle is smaller than *Minimal angle*, the angular range will be *Minimal angle* to 360 and -360 to *Maximal angle*")
-            z_min = st.number_input('Minimal z (Å)', value=round(-nz//2*dz,1), min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%g", help="Set the minimal axial section of the cylindric projection to be included to compute the auto-correlation function")
-            z_max = st.number_input('Maximal z (Å)', value=round(nz//2*dz,1), min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%g", help="Set the maximal axial section of the cylindric projection to be included to compute the auto-correlation function")
+            ang_min = st.number_input('Minimal angle (°)', value=-180., min_value=-180.0, max_value=180., step=1.0, format="%g", help="Set the minimal azimuthal angle of the cylindric projection to be included to compute the auto-correlation function", key="ang_min")
+            ang_max = st.number_input('Maximal angle (°)', value=180., min_value=-180.0, max_value=180., step=1.0, format="%g", help="Set the maximal azimuthal angle of the cylindric projection to be included to compute the auto-correlation function. If this angle is smaller than *Minimal angle*, the angular range will be *Minimal angle* to 360 and -360 to *Maximal angle*", key="ang_max")
+            z_min = st.number_input('Minimal z (Å)', value=round(-nz//2*dz,1), min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%g", help="Set the minimal axial section of the cylindric projection to be included to compute the auto-correlation function", key="z_min")
+            z_max = st.number_input('Maximal z (Å)', value=round(nz//2*dz,1), min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%g", help="Set the maximal axial section of the cylindric projection to be included to compute the auto-correlation function", key="z_max")
             if z_max<=z_min:
                 st.warning(f"'Maximal z'(={z_max}) should be larger than 'Minimal z'(={z_min})")
                 return
@@ -383,14 +382,14 @@ def main():
         del cylproj_work
         acf = auto_correlation(cylproj_square, high_pass_fraction=1./cylproj_square.shape[0])
         del cylproj_square
-        show_acf = st.checkbox(label="ACF", value=True, help="Display the auto-correlation function (ACF)")
+        show_acf = st.checkbox(label="ACF", value=True, help="Display the auto-correlation function (ACF)", key="show_acf")
         if show_acf:
             show_peaks_empty = st.empty()
 
         peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, minmass=1.0)
         if peaks is not None:
             npeaks_all = len(peaks)
-            npeaks = int(npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)"))
+            npeaks = int(npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)", key="npeaks"))
 
         show_arrow_empty = st.empty()
         server_info_empty.markdown(server_info.format(mem_used=mem_used()))
@@ -420,7 +419,7 @@ def main():
             fig_acf = generate_bokeh_figure(acf, da, dz, title=f"Auto-Correlation ({w}x{h})", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=True, crosshair_color="white", aspect_ratio=w/h)
 
             if peaks is not None:
-                show_peaks = show_peaks_empty.checkbox(label="Peaks", value=True, help=f"Mark the {len(peaks)} peaks detected in the auto-correlation function with yellow circles")
+                show_peaks = show_peaks_empty.checkbox(label="Peaks", value=True, help=f"Mark the {len(peaks)} peaks detected in the auto-correlation function with yellow circles", key="show_peaks")
                 if show_peaks:
                     x = peaks[:npeaks, 0]
                     y = peaks[:npeaks, 1]
@@ -475,16 +474,16 @@ def main():
             msg+= f"Csym &emsp; &emsp; &emsp; &emsp; : c{trc1[2]}&emsp;&emsp;&emsp;&emsp;c{trc2[2]}"
             msg_empty.warning(msg)
 
-        twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function")
-        rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=float(round(rise_auto,2)), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function")
-        csym = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=csym_auto, step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function"))
+        twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function", key="twist")
+        rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=float(round(rise_auto,2)), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function", key="rise")
+        csym = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=csym_auto, step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function", key="csym"))
         fig_indexing.title.text = f"twist={round(twist,2):g}°  rise={round(rise,2):g}Å  csym=c{csym}"
         fig_indexing.title.align = "center"
         fig_indexing.title.text_font_size = "24px"
         fig_indexing.title.text_font_style = "normal"
         fig_indexing.hover[0].attachment = "vertical"
 
-        show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True, help="Show an arrow in the central panel from the center to the first lattice point corresponding to the helical twist/rise")
+        show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True, help="Show an arrow in the central panel from the center to the first lattice point corresponding to the helical twist/rise", key="show_arrow")
         if show_arrow:
             fig_indexing.add_layout(Arrow(x_start=0, y_start=0, x_end=twist, y_end=rise, line_color="yellow", line_width=4, end=VeeHead(line_color="yellow", fill_color="yellow", line_width=2)))
 
@@ -502,13 +501,8 @@ def main():
 
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
 
-    if set_url:
-        if input_mode in [2, 3]:
-            st.experimental_set_query_params(input_mode=input_mode, emdid=f"emd-{emd_id}")
-        elif input_mode == 1:
-            st.experimental_set_query_params(input_mode=input_mode, url=url)
-        else:
-            st.experimental_set_query_params()
+    if share_url:
+        set_query_parameters()
     else:
         st.experimental_set_query_params()
 
@@ -1197,6 +1191,32 @@ def get_3d_map_from_file(filename):
         is3d = mrc.is_volume() or mrc.is_volume_stack()
         data = mrc.data
     return data, apix
+
+int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'share_url', 'show_acf', 'show_arrow', 'show_cylproj', 'show_peaks']
+float_types = ['ang_max', 'ang_min', 'da', 'dz', 'rise', 'rmax', 'rmin', 'twist', 'z_max', 'z_min']
+default_values = {'csym':1, 'do_threshold':1, 'do_transform':0, 'input_mode':2, 'random_embid':1, 'share_url':0, 'show_acf':1, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'z_max':-180., 'z_min':180.}
+def set_query_parameters():
+    d = {}
+    for k in st.session_state:
+        v = st.session_state[k]
+        if k in default_values and v==default_values[k]: continue
+        if k in int_types or isinstance(v, bool):
+            d[k] = int(v)
+        elif k in float_types:
+            d[k] = float(v)
+        else:
+            d[k] = v
+    st.experimental_set_query_params(**d)
+
+def parse_query_parameters():
+    query_params = st.experimental_get_query_params()
+    for attr in query_params:
+        if attr in int_types:
+            st.session_state[attr] = int(query_params[attr][0])
+        elif attr in float_types:
+            st.session_state[attr] = float(query_params[attr][0])
+        else:
+            st.session_state[attr] = query_params[attr][0]
 
 @st.experimental_singleton(show_spinner=False)
 def setup_anonymous_usage_tracking():
