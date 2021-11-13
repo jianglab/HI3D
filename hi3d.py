@@ -188,9 +188,9 @@ def main():
             st.warning(f"The map is blank: min={vmin} max={vmax}. Please provide a meaningful 3D map")
             st.stop()
 
-        axis_mapping = {0:'X', 1:'Y', 2:'Z'}
+        axis_mapping = {2:'X', 1:'Y', 0:'Z'}
         section_axis = st.radio(label="Display a section along this axis:", options=list(axis_mapping.keys()), format_func=lambda i:axis_mapping[i], index=0, key="section_axis")
-        mapping = {0:nx, 1:ny, 2:nz}
+        mapping = {0:nz, 1:ny, 2:nx}
         n = mapping[section_axis]
         section_index = st.slider(label="Choose a section to display:", min_value=1, max_value=n, value=n//2+1, step=1)
         container_image = st.container()
@@ -215,15 +215,16 @@ def main():
                 roty_auto, shiftx_auto = auto_vertical_center(np.sum(data, axis=1))
                 rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=round(rotx_auto,2), step=1.0, format="%g", key="rotx")
                 roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=round(roty_auto,2), step=1.0, format="%g", key="roty")
-                shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(shiftx_auto*apix,2), step=1.0, format="%g", key="shiftx")
-                shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=round(shifty_auto*apix,2), step=1.0, format="%g", key="shifty")
+                shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(min(max(-nx//2*apix, shiftx_auto*apix), nx//2*apix), 2), step=1.0, format="%g", key="shiftx")
+                shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=round(min(max(-ny//2*apix, shifty_auto*apix), ny//2*apix), 2), step=1.0, format="%g", key="shifty")
+                shiftz = st.number_input(label="Shift map along Z-axis (Å):", min_value=-nz//2*apix, max_value=nz//2*apix, value=0.0, step=1.0, format="%g", key="shiftz")
             else:
-                rotx, roty, shiftx, shifty = 0., 0., 0., 0.
+                rotx, roty, shiftx, shifty, shiftz = 0., 0., 0., 0., 0.
 
         image = np.squeeze(np.take(data, indices=[section_index-1], axis=section_axis))
         h, w = image.shape
-        if thresh is not None or rotx or roty or shiftx or shifty:
-            data = transform_map(data, shift_x=shiftx/apix, shift_y=-shifty/apix, angle_x=-rotx, angle_y=-roty)
+        if thresh is not None or rotx or roty or shiftx or shifty or shiftz:
+            data = transform_map(data, shift_x=shiftx/apix, shift_y=-shifty/apix, shift_z=-shiftz/apix, angle_x=-rotx, angle_y=-roty)
             image2 = np.squeeze(np.take(data, indices=[section_index-1], axis=section_axis))
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
@@ -469,10 +470,14 @@ def main():
             csym_auto = cn
         else:
             twist_auto, rise_auto, csym_auto = trc1
-            msg = f"Failed to obtain consistent helical parameters using {npeaks} peaks. The two sollutions are:  \n"
-            msg+= f"Twist per subunit: {round(trc1[0],2):g}&emsp;{round(trc2[0],2):g} °  \n"
-            msg+= f"Rise &nbsp; per subunit: {round(trc1[1],2):g}&emsp;&emsp;&emsp;{round(trc2[1]):g} Å  \n"
-            msg+= f"Csym &emsp; &emsp; &emsp; &emsp; : c{trc1[2]}&emsp;&emsp;&emsp;&emsp;c{trc2[2]}"
+            msg = f"The two automated methods with default parameters have failed to obtain consistent helical parameters using {npeaks} peaks. The two sollutions are:  \n"
+            msg+= f"Twist per subunit:&emsp;&emsp;{round(trc1[0],2):>6.2f}&emsp;{round(trc2[0],2):>6.2f} °  \n"
+            msg+= f"Rise &nbsp; per subunit:&emsp;&emsp;{round(trc1[1],2):>6.2f}&emsp;{round(trc2[1]):>6.2f} Å  \n"
+            msg+= f"Csym &emsp;&emsp;&emsp;&emsp;&emsp;:&emsp;&emsp;c{trc1[2]:5}&emsp;&emsp;c{trc2[2]:5}  \n  \n"
+            msg+= f"There are a few things you can try:  \n"
+            msg+= f"· Ensure the map is vertical along Z-axis and centered in XY plane  \n"
+            msg+= f"· Change \"Axial step size\" to a larger value (1 → 2 or 3 Å) for large rise structures or a smaller value (1 → 0.2 Å) for small rise structures (for example, amyloids)  \n"
+            msg+= f"· Manually inspect the autocorrelation image at the center of the screen, use mouse hover tips to reveal the corresponding twist/rise values at the pixel under the mouse pointer  \n"
             msg_empty.warning(msg)
 
         twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function", key="twist")
@@ -994,7 +999,7 @@ def compute_radial_profile(data):
     return rad_profile
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
-def transform_map(data, shift_x=0, shift_y=0, angle_x=0, angle_y=0):
+def transform_map(data, shift_x=0, shift_y=0, shift_z=0, angle_x=0, angle_y=0):
     if not (shift_x or shift_y or angle_x or angle_y):
         return data
     from scipy.spatial.transform import Rotation as R
@@ -1005,7 +1010,7 @@ def transform_map(data, shift_x=0, shift_y=0, angle_x=0, angle_y=0):
     m = rot.as_matrix()
     nx, ny, nz = data.shape
     bcenter = np.array((nx//2, ny//2, nz//2), dtype=m.dtype)
-    offset = bcenter.T - np.dot(m, bcenter.T) + np.array([0.0, shift_y, -shift_x])
+    offset = bcenter.T - np.dot(m, bcenter.T) + np.array([shift_z, shift_y, -shift_x])
     ret = affine_transform(data, matrix=m, offset=offset, mode='nearest')
     return ret
 
@@ -1194,7 +1199,7 @@ def get_3d_map_from_file(filename):
     return data, apix
 
 int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_arrow', 'show_cylproj', 'show_peaks']
-float_types = ['ang_max', 'ang_min', 'da', 'dz', 'rise', 'rmax', 'rmin', 'twist', 'z_max', 'z_min']
+float_types = ['ang_max', 'ang_min', 'da', 'dz', 'rise', 'rmax', 'rmin', 'shiftx', 'shifty', 'shiftz', 'rotx', 'roty', 'twist', 'z_max', 'z_min']
 default_values = {'csym':1, 'do_threshold':1, 'do_transform':0, 'input_mode':2, 'random_embid':1, 'section_axis':0, 'share_url':0, 'show_acf':1, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'z_max':-180., 'z_min':180.}
 def set_query_parameters():
     d = {}
