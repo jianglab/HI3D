@@ -320,6 +320,10 @@ def main():
             server_info_empty.markdown(server_info.format(mem_used=mem_used()))
 
         share_url = st.checkbox('Show sharable URL', value=False, help="Include relevant parameters in the browser URL to allow you to share the URL and reproduce the plots", key="share_url")
+        if share_url:
+            show_qr = st.checkbox('Show QR code of the URL', value=False, help="Display the QR code of the sharable URL", key="show_qr")
+        else:
+            show_qr = False
 
         hide_streamlit_style = """
         <style>
@@ -505,12 +509,17 @@ def main():
         del fig_indexing
         del acf
 
-        st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
-
     if share_url:
         set_query_parameters()
+        if show_qr:
+            with col2:
+                qr_image = qr_code()
+                st.image(qr_image)
     else:
         st.experimental_set_query_params()
+
+    with col2:
+        st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
 
     server_info_empty.markdown(server_info.format(mem_used=mem_used()))
 
@@ -1198,15 +1207,14 @@ def get_3d_map_from_file(filename):
         data = mrc.data
     return data, apix
 
-int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_arrow', 'show_cylproj', 'show_peaks']
+int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_arrow', 'show_cylproj', 'show_peaks', 'show_qr']
 float_types = ['ang_max', 'ang_min', 'da', 'dz', 'rise', 'rmax', 'rmin', 'shiftx', 'shifty', 'shiftz', 'rotx', 'roty', 'thresh', 'twist', 'z_max', 'z_min']
-default_values = {'csym':1, 'do_threshold':0, 'do_transform':0, 'input_mode':2, 'random_embid':1, 'section_axis':2, 'share_url':0, 'show_acf':1, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'rmin':0, 'shiftx':0, 'shifty':0, 'shiftz':0, 'rotx':0, 'roty':0, 'thresh':0, 'z_max':-180., 'z_min':180.}
+default_values = {'csym':1, 'do_threshold':0, 'do_transform':0, 'input_mode':2, 'random_embid':1, 'section_axis':2, 'share_url':0, 'show_acf':1, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'show_qr':0, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'rmin':0, 'shiftx':0, 'shifty':0, 'shiftz':0, 'rotx':0, 'roty':0, 'thresh':0, 'z_max':-180., 'z_min':180.}
 def set_query_parameters():
     d = {}
     attrs = sorted(st.session_state.keys())
     for attr in attrs:
         v = st.session_state[attr]
-        print(attr, v, attr in default_values, v==default_values[attr] if attr in default_values else None)
         if attr in default_values and v==default_values[attr]: continue
         if attr in int_types or isinstance(v, bool):
             d[attr] = int(v)
@@ -1225,6 +1233,27 @@ def parse_query_parameters():
             st.session_state[attr] = float(query_params[attr][0])
         else:
             st.session_state[attr] = query_params[attr][0]
+
+def qr_code(url=None, size = 8):
+    import_with_auto_install(["qrcode"])
+    import qrcode
+    if url is None: # ad hoc way before streamlit can return the url
+        _, host = is_hosted(return_host=True)
+        if len(host)<1: return None
+        if host == "streamlit":
+            url = "https://share.streamlit.io/wjiang/hi3d/main/"
+        elif host == "heroku":
+            url = "https://helical-indexing-hi3d.herokuapp.com/"
+        else:
+            url = f"http://{host}:8501/"
+        import urllib
+        params = st.experimental_get_query_params()
+        d = {k:params[k][0] for k in params}
+        url += "?" + urllib.parse.urlencode(d)
+    if not url: return None
+    img = qrcode.make(url)  # qrcode.image.pil.PilImage
+    data = np.array(img.convert("RGBA"))
+    return data
 
 @st.experimental_singleton(show_spinner=False)
 def setup_anonymous_usage_tracking():
@@ -1277,13 +1306,23 @@ def get_hostname():
     fqdn = socket.getfqdn()
     return fqdn
 
-def is_hosted():
+def is_hosted(return_host=False):
+    hosted = False
+    host = ""
     fqdn = get_hostname()
+    if fqdn.find("heroku")!=-1:
+        hosted = True
+        host = "heroku"
     username = get_username()
-    if fqdn.find("heroku")!=-1 or username.find("appuser")!=-1:
-        return True
+    if username.find("appuser")!=-1:
+        hosted = True
+        host = "streamlit"
+    if not host:
+        host = "localhost"
+    if return_host:
+        return hosted, host
     else:
-        return False
+        return hosted
 
 def set_to_periodic_range(v, min=-180, max=180):
     from math import fmod
