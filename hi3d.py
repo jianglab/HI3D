@@ -1199,19 +1199,21 @@ def get_3d_map_from_file(filename):
     return data, apix
 
 int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_arrow', 'show_cylproj', 'show_peaks']
-float_types = ['ang_max', 'ang_min', 'da', 'dz', 'rise', 'rmax', 'rmin', 'shiftx', 'shifty', 'shiftz', 'rotx', 'roty', 'twist', 'z_max', 'z_min']
-default_values = {'csym':1, 'do_threshold':1, 'do_transform':0, 'input_mode':2, 'random_embid':1, 'section_axis':0, 'share_url':0, 'show_acf':1, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'z_max':-180., 'z_min':180.}
+float_types = ['ang_max', 'ang_min', 'da', 'dz', 'rise', 'rmax', 'rmin', 'shiftx', 'shifty', 'shiftz', 'rotx', 'roty', 'thresh', 'twist', 'z_max', 'z_min']
+default_values = {'csym':1, 'do_threshold':0, 'do_transform':0, 'input_mode':2, 'random_embid':1, 'section_axis':2, 'share_url':0, 'show_acf':1, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'rmin':0, 'shiftx':0, 'shifty':0, 'shiftz':0, 'rotx':0, 'roty':0, 'thresh':0, 'z_max':-180., 'z_min':180.}
 def set_query_parameters():
     d = {}
-    for k in st.session_state:
-        v = st.session_state[k]
-        if k in default_values and v==default_values[k]: continue
-        if k in int_types or isinstance(v, bool):
-            d[k] = int(v)
-        elif k in float_types:
-            d[k] = float(v)
+    attrs = sorted(st.session_state.keys())
+    for attr in attrs:
+        v = st.session_state[attr]
+        print(attr, v, attr in default_values, v==default_values[attr] if attr in default_values else None)
+        if attr in default_values and v==default_values[attr]: continue
+        if attr in int_types or isinstance(v, bool):
+            d[attr] = int(v)
+        elif attr in float_types:
+            d[attr] = float(v)
         else:
-            d[k] = v
+            d[attr] = v
     st.experimental_set_query_params(**d)
 
 def parse_query_parameters():
