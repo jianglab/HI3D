@@ -486,7 +486,7 @@ def main():
 
         twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function", key="twist")
         rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=float(round(rise_auto,2)), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function", key="rise")
-        csym = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=csym_auto, step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function", key="csym"))
+        csym = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=int(csym_auto), step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function", key="csym"))
         fig_indexing.title.text = f"twist={round(twist,2):g}°  rise={round(rise,2):g}Å  csym=c{csym}"
         fig_indexing.title.align = "center"
         fig_indexing.title.text_font_size = "24px"
@@ -645,7 +645,7 @@ def consistent_twist_rise_cn_sets(twist_rise_cn_set_1, twist_rise_cn_set_2, epsi
             cn = cn1
             rise_tmp = (rise1+rise2)/2
             twist_tmp = angle_mean(twist1, twist2)
-            return twist_tmp, rise_tmp, cn
+            return twist_tmp, rise_tmp, int(cn)
         else:
             return None
     for twist_rise_cn_1 in twist_rise_cn_set_1:
@@ -658,6 +658,7 @@ def consistent_twist_rise_cn_sets(twist_rise_cn_set_1, twist_rise_cn_set_2, epsi
 def refine_twist_rise(acf_image, twist, rise, cn):
     from scipy.optimize import minimize
     if rise<=0: return twist, rise
+    cn = int(cn)
 
     acf_image, da, dz = acf_image
     
