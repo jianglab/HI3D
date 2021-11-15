@@ -66,6 +66,12 @@ def main():
     if max_map_size>0:
         warning_map_size = f"Due to the resource limit ({mem_quota():.1f} MB memory cap) of the free hosting service, the maximal map size should be {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less to avoid crashing the server process"
 
+    msg_hint = f"There are a few things you can try:  \n"
+    msg_hint+= f"· Ensure the map is vertical along Z-axis and centered in XY plane  \n"
+    msg_hint+= f"· Change \"Axial step size\" to a larger value (1 → 2 or 3 Å) for large rise structures or a smaller value (1 → 0.2 Å) for small rise structures (for example, amyloids)  \n"
+    msg_hint+= f"· Change \"Peak width\" and \"Peak height\" to approximate the size/shape of the peaks in the autocorrelation image  \n"
+    msg_hint+= f"· Manually inspect the autocorrelation image at the center of the screen, use mouse hover tips to reveal the corresponding twist/rise values at the pixel under the mouse pointer  \n"
+
     col1, col2, col3, col4 = st.columns((1.0, 3.2, 0.6, 1.15))
 
     msg_empty = col2.empty()
@@ -336,6 +342,8 @@ def main():
     with col3:
         da = st.number_input('Angular step size (°)', value=da_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the azimuthal angle step size for the computation of the cylindric projection", key="da")
         dz = st.number_input('Axial step size (Å)', value=dz_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the axial step size for the computation of the cylindric projection. Use a smaller step size (such as 0.2 Å) for a helical structure with small rise (such as a protein fibril with rise ~2.3-2.4 Å or ~4.7-4.8 Å)", key="dz")
+        peak_width = st.number_input('Peak width (°)', value=max(1.0, da*9.0), min_value=0.1, max_value=60.0, step=1.0, format="%g", help="Set the expected peak width (°) in the auto-correlation image", key="peak_width")
+        peak_height = st.number_input('Peak height (Å)', value=max(1.0, dz*9.0), min_value=0.1, max_value=30.0, step=1.0, format="%g", help="Set the expected peak height (Å) in the auto-correlation image", key="peak_height")
 
         npeaks_empty = st.empty()
         
@@ -354,8 +362,8 @@ def main():
             nz, na = cylproj.shape
             ang_min = st.number_input('Minimal angle (°)', value=-180., min_value=-180.0, max_value=180., step=1.0, format="%g", help="Set the minimal azimuthal angle of the cylindric projection to be included to compute the auto-correlation function", key="ang_min")
             ang_max = st.number_input('Maximal angle (°)', value=180., min_value=-180.0, max_value=180., step=1.0, format="%g", help="Set the maximal azimuthal angle of the cylindric projection to be included to compute the auto-correlation function. If this angle is smaller than *Minimal angle*, the angular range will be *Minimal angle* to 360 and -360 to *Maximal angle*", key="ang_max")
-            z_min = st.number_input('Minimal z (Å)', value=round(-nz//2*dz,1), min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%g", help="Set the minimal axial section of the cylindric projection to be included to compute the auto-correlation function", key="z_min")
-            z_max = st.number_input('Maximal z (Å)', value=round(nz//2*dz,1), min_value=-nz//2*dz, max_value=nz//2*dz, step=1.0, format="%g", help="Set the maximal axial section of the cylindric projection to be included to compute the auto-correlation function", key="z_max")
+            z_min = st.number_input('Minimal z (Å)', value=round(-nz//2*dz,1), min_value=round(-nz//2*dz,1), max_value=round(nz//2*dz,1), step=1.0, format="%g", help="Set the minimal axial section of the cylindric projection to be included to compute the auto-correlation function", key="z_min")
+            z_max = st.number_input('Maximal z (Å)', value=round(nz//2*dz,1), min_value=round(-nz//2*dz,1), max_value=round(nz//2*dz,1), step=1.0, format="%g", help="Set the maximal axial section of the cylindric projection to be included to compute the auto-correlation function", key="z_max")
             if z_max<=z_min:
                 st.warning(f"'Maximal z'(={z_max}) should be larger than 'Minimal z'(={z_min})")
                 return
@@ -392,7 +400,7 @@ def main():
         if show_acf:
             show_peaks_empty = st.empty()
 
-        peaks = find_peaks(acf, da=da, dz=dz, peak_diameter=0.025, minmass=1.0)
+        peaks, _ = find_peaks(acf, da=da, dz=dz, peak_width=peak_width, peak_height=peak_height, minmass=1.0)
         if peaks is not None:
             npeaks_all = len(peaks)
             npeaks = int(npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)", key="npeaks"))
@@ -440,10 +448,10 @@ def main():
             del fig_acf
 
         if peaks is None:
-            msg_empty.warning("No peak was found from the auto-correlation image")
+            msg_empty.warning("No peak was found from the auto-correlation image  \n" + msg_hint)
             return
         elif len(peaks)<3:
-            msg_empty.warning(f"Only {len(peaks)} peaks were found. At least 3 peaks are required")
+            msg_empty.warning(f"Only {len(peaks)} peaks were found. At least 3 peaks are required  \n" + msg_hint)
             return
 
         twist_empty = st.empty()
@@ -469,7 +477,7 @@ def main():
         success = True if trc_mean else False
 
         if success:
-            twist_tmp, rise_tmp, cn = trc_mean
+            twist_tmp, rise_tmp, cn = trc_mean[0]
             twist_auto, rise_auto = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_tmp, rise=rise_tmp, cn=cn)
             csym_auto = cn
         else:
@@ -478,10 +486,7 @@ def main():
             msg+= f"Twist per subunit:&emsp;&emsp;{round(trc1[0],2):>6.2f}&emsp;{round(trc2[0],2):>6.2f} °  \n"
             msg+= f"Rise &nbsp; per subunit:&emsp;&emsp;{round(trc1[1],2):>6.2f}&emsp;{round(trc2[1]):>6.2f} Å  \n"
             msg+= f"Csym &emsp;&emsp;&emsp;&emsp;&emsp;:&emsp;&emsp;c{trc1[2]:5}&emsp;&emsp;c{trc2[2]:5}  \n  \n"
-            msg+= f"There are a few things you can try:  \n"
-            msg+= f"· Ensure the map is vertical along Z-axis and centered in XY plane  \n"
-            msg+= f"· Change \"Axial step size\" to a larger value (1 → 2 or 3 Å) for large rise structures or a smaller value (1 → 0.2 Å) for small rise structures (for example, amyloids)  \n"
-            msg+= f"· Manually inspect the autocorrelation image at the center of the screen, use mouse hover tips to reveal the corresponding twist/rise values at the pixel under the mouse pointer  \n"
+            msg+= msg_hint
             msg_empty.warning(msg)
 
         twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function", key="twist")
@@ -567,11 +572,15 @@ def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
         #st.warning(f"WARNING: only {len(peaks)} peaks were found. At least 3 peaks are required")
         return (None, None, peaks)
 
+    trc1s = []
+    trc2s = []
     consistent_solution_found = False
     nmax = len(peaks) if len(peaks)%2 else len(peaks)-1
-    for n in range(nmax, 3-1, -2):
+    for n in range(nmax, min(7, nmax)-1, -2):
         trc1 = getHelicalLattice(peaks[:n])
         trc2 = getGenericLattice(peaks[:n])
+        trc1s.append(trc1)
+        trc2s.append(trc2)
         if consistent_twist_rise_cn_sets([trc1], [trc2], epsilon=1.0):
             consistent_solution_found = True
             break
@@ -589,10 +598,20 @@ def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
             peaks_random = peaks[random_choices]
             trc1 = getHelicalLattice(peaks_random)
             trc2 = getGenericLattice(peaks_random)
-            if consistent_twist_rise_cn_sets([trc1], [trc2], epsilon=1.0):
+            trc1s.append(trc1)
+            trc2s.append(trc2)
+            if consistent_twist_rise_cn_sets([trc1], [trc2], epsilon=1):
                 consistent_solution_found = True
                 break
     
+    if not consistent_solution_found: 
+        trc_mean = consistent_twist_rise_cn_sets(trc1s, trc2s, epsilon=1)
+        if trc_mean:
+            _, trc1, trc2 = trc_mean
+        else:
+            trc1 = (np.median([tmp[0] for tmp in trc1s]), np.median([tmp[1] for tmp in trc1s]), np.median([tmp[2] for tmp in trc1s]))
+            trc2 = (np.median([tmp[0] for tmp in trc2s]), np.median([tmp[1] for tmp in trc2s]), np.median([tmp[2] for tmp in trc2s]))
+
     twist1, rise1, cn1 = trc1
     twist1, rise1 = refine_twist_rise(acf_image=(acf, da, dz), twist=twist1, rise=rise1, cn=cn1)
     twist2, rise2, cn2 = trc2
@@ -601,8 +620,19 @@ def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
     return (twist1, rise1, cn1), (twist2, rise2, cn2)
 
 def consistent_twist_rise_cn_sets(twist_rise_cn_set_1, twist_rise_cn_set_2, epsilon=1.0):
+    def angle_difference(angle1, angle2):
+        err = abs((angle1 - angle2) % 360)
+        if err > 180: err -= 360
+        err = abs(err)
+        return err
+
+    def angle_mean(angle1, angle2):
+        angles = np.deg2rad([angle1, angle2])
+        ret = np.rad2deg(np.arctan2( np.sin(angles).sum(), np.cos(angles).sum()))
+        return ret
+
     def consistent_twist_rise_cn_pair(twist_rise_cn_1, twist_rise_cn_2, epsilon=1.0):
-        def good_twist_rise_cn(twist, rise, cn, epsilon=1):
+        def good_twist_rise_cn(twist, rise, cn, epsilon=0.1):
             if abs(twist)>epsilon:
                 if abs(rise)>epsilon: return True
                 elif abs(rise*360./twist/cn)>epsilon: return True # pitch>epsilon
@@ -614,19 +644,19 @@ def consistent_twist_rise_cn_sets(twist_rise_cn_set_1, twist_rise_cn_set_2, epsi
             return None
         twist1, rise1, cn1 = twist_rise_cn_1
         twist2, rise2, cn2 = twist_rise_cn_2
-        if not good_twist_rise_cn(twist1, rise1, cn1, epsilon=1): return None
-        if not good_twist_rise_cn(twist2, rise2, cn2, epsilon=1): return None
-        if cn1==cn2 and abs(rise2-rise1)<epsilon and abs(twist2-twist1)<epsilon:
+        if not good_twist_rise_cn(twist1, rise1, cn1, epsilon=0.1): return None
+        if not good_twist_rise_cn(twist2, rise2, cn2, epsilon=0.1): return None
+        if cn1==cn2 and abs(rise2-rise1)<epsilon and angle_difference(twist1, twist2)<epsilon:
             cn = cn1
             rise_tmp = (rise1+rise2)/2
-            twist_tmp = (twist1+twist2)/2
+            twist_tmp = angle_mean(twist1, twist2)
             return twist_tmp, rise_tmp, cn
         else:
             return None
     for twist_rise_cn_1 in twist_rise_cn_set_1:
         for twist_rise_cn_2 in twist_rise_cn_set_2:
             trc = consistent_twist_rise_cn_pair(twist_rise_cn_1, twist_rise_cn_2, epsilon=epsilon)
-            if trc: return trc
+            if trc: return (trc, twist_rise_cn_1, twist_rise_cn_2)
     return None
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
@@ -836,7 +866,7 @@ def getGenericLattice(peaks):
 
     a, b = bestLattice["a"], bestLattice["b"]
 
-    minLength = min(np.linalg.norm(a), np.linalg.norm(b)) * 0.9
+    minLength = max(1.0, min(np.linalg.norm(a), np.linalg.norm(b)) * 0.9)
     vs_on_equator = []
     vs_off_equator = []
     maxI = 10
@@ -844,7 +874,8 @@ def getGenericLattice(peaks):
         for j in range(-maxI, maxI + 1):
             if i or j:
                 v = i * a + j * b
-                if -180 <= v[0] <= 180 and np.linalg.norm(v) > minLength:
+                v[0] = set_to_periodic_range(v[0], min=-180, max=180)
+                if np.linalg.norm(v) > minLength:
                     if v[1]<0: v *= -1
                     if onEquator(v, epsilon=epsilon):
                         vs_on_equator.append(v)
@@ -867,19 +898,42 @@ def getGenericLattice(peaks):
     return twist, rise, cn
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
-def find_peaks(acf, da, dz, peak_diameter=0.025, minmass=1.0, max_peaks=71):
+def find_peaks(acf, da, dz, peak_width=9.0, peak_height=9.0, minmass=1.0, max_peaks=71):
     import_with_auto_install(["trackpy"])
-    from trackpy import locate
+    from trackpy import locate, refine_com
     # diameter: fraction of the maximal dimension of the image (acf)
-    diameter = int(max(acf.shape)*peak_diameter)//2*2+1
-    acf2 = np.hstack((acf[:, -diameter:], acf, acf[:, :diameter]))   # to handle peaks at left/right edges
+    diameter_height = int(peak_height/dz+0.5)//2*2+1
+    diameter_width = int(peak_width/da+0.5)//2*2+1
+    pad_width = diameter_width * 3
+    acf2 = np.hstack((acf[:, -pad_width:], acf, acf[:, :pad_width]))   # to handle peaks at left/right edges
+    
+    # try a few different shapes around the starting height/width
+    params = []
+    for hf, wf in ((1, 1), (1, 2), (0.5, 0.5), (0.5, 1)):
+        params += [(int(diameter_height*hf+0.5)//2*2+1, int(diameter_width*wf+0.5)//2*2+1)]
     while True:
-        f = locate(acf2, diameter=diameter, minmass=minmass)
-        if len(f)>3: break
+        results = []
+        for h, w in params:
+            if h<1 or w<1: continue
+            try:
+                f = locate(acf2, diameter=(h, w), minmass=minmass, separation=(h*2, w*2))
+                if len(f):
+                    results.append((f["mass"].sum()*np.power(len(f), -0.5), len(f), f, h, w))
+                    try:
+                        f_refined = refine_com(raw_image=acf2, image=acf2, radius=(h//2, w//2), coords=f)    # radius must be even integers?
+                        results.append((f_refined["mass"].sum()*np.power(len(f_refined), -0.5), len(f_refined), f_refined, h, w))
+                    except:
+                        pass
+            except:
+                pass
+            if len(results) and results[-1][1] > 31: break
+        results.sort(key=lambda x: x[0], reverse=True)
+        if len(results) and results[0][1]>3: break
         minmass *= 0.9
-        if minmass<0.1:
-            return None
-    f.loc[:, 'x'] -= diameter
+        if minmass<0.1: return None, None
+    f = results[0][2]
+
+    f.loc[:, 'x'] -= pad_width
     f = f.loc[ (f['x'] >= 0) & (f['x'] < acf.shape[1]) ]
     f = f.sort_values(["mass"], ascending=False)[:max_peaks]
     peaks = np.zeros((len(f), 2), dtype=float)
@@ -887,7 +941,7 @@ def find_peaks(acf, da, dz, peak_diameter=0.025, minmass=1.0, max_peaks=71):
     peaks[:, 1] = f['y'].values - acf.shape[0]//2    # pixel
     peaks[:, 0] *= da  # the values are now in degree
     peaks[:, 1] *= dz  # the values are now in Angstrom
-    return peaks
+    return peaks, f["mass"]
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def auto_correlation(data, high_pass_fraction=0):
@@ -1037,7 +1091,11 @@ def auto_vertical_center(image, max_angle=15):
         return err
     from scipy.optimize import minimize_scalar
     res = minimize_scalar(score_rotation, bounds=(-max_angle, max_angle), method='bounded', options={'disp':0})
-    angle = res.x
+    res_90 = minimize_scalar(score_rotation, bounds=(90-max_angle, 90+max_angle), method='bounded', options={'disp':0})
+    if res.fun < res_90.fun:
+        angle = res.x
+    else:
+        angle = res_90.x
 
     # further refine rotation
     def score_rotation_shift(x):
@@ -1208,8 +1266,8 @@ def get_3d_map_from_file(filename):
     return data, apix
 
 int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_arrow', 'show_cylproj', 'show_peaks', 'show_qr']
-float_types = ['ang_max', 'ang_min', 'da', 'dz', 'rise', 'rmax', 'rmin', 'shiftx', 'shifty', 'shiftz', 'rotx', 'roty', 'thresh', 'twist', 'z_max', 'z_min']
-default_values = {'csym':1, 'do_threshold':0, 'do_transform':0, 'input_mode':2, 'random_embid':1, 'section_axis':2, 'share_url':0, 'show_acf':1, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'show_qr':0, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'rmin':0, 'shiftx':0, 'shifty':0, 'shiftz':0, 'rotx':0, 'roty':0, 'thresh':0, 'z_max':-180., 'z_min':180.}
+float_types = ['ang_max', 'ang_min', 'da', 'dz', 'peak_width', 'peak_height', 'rise', 'rmax', 'rmin', 'shiftx', 'shifty', 'shiftz', 'rotx', 'roty', 'thresh', 'twist', 'z_max', 'z_min']
+default_values = {'csym':1, 'do_threshold':0, 'do_transform':0, 'input_mode':2, 'npeaks':71, 'random_embid':1, 'section_axis':2, 'share_url':0, 'show_acf':1, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'show_qr':0, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'peak_width':9.0, 'peak_height':9.0, 'rmin':0, 'shiftx':0, 'shifty':0, 'shiftz':0, 'rotx':0, 'roty':0, 'thresh':0, 'z_max':-180., 'z_min':180.}
 def set_query_parameters():
     d = {}
     attrs = sorted(st.session_state.keys())
