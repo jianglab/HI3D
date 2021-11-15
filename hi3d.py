@@ -437,12 +437,7 @@ def main():
                 if show_peaks:
                     x = peaks[:npeaks, 0]
                     y = peaks[:npeaks, 1]
-                    xs = np.sort(x)
-                    ys = np.sort(y)
-                    xs_step = np.median(xs[1:]-xs[:-1])
-                    ys_step = np.median(ys[1:]-ys[:-1])
-                    size = min(15, 100/(xs_step+ys_step))
-                    fig_acf.circle(x, y, size=size, line_width=2, line_color='yellow', fill_alpha=0)
+                    fig_acf.ellipse(x, y, width=peak_width, height=peak_height, line_width=1, line_color='yellow', fill_alpha=0)
 
             st.bokeh_chart(fig_acf, use_container_width=True)
             del fig_acf
