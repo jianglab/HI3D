@@ -219,6 +219,10 @@ def main():
             if do_transform:
                 rotx_auto, shifty_auto = auto_vertical_center(np.sum(data, axis=2))
                 roty_auto, shiftx_auto = auto_vertical_center(np.sum(data, axis=1))
+                if "rotx" in st.session_state: rotx_auto = st.session_state.rotx
+                if "roty" in st.session_state: roty_auto = st.session_state.roty
+                if "shiftx" in st.session_state: shiftx_auto = st.session_state.shiftx
+                if "shifty" in st.session_state: shifty_auto = st.session_state.shifty
                 rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=round(rotx_auto,2), step=1.0, format="%g", key="rotx")
                 roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=round(roty_auto,2), step=1.0, format="%g", key="roty")
                 shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(min(max(-nx//2*apix, shiftx_auto*apix), nx//2*apix), 2), step=1.0, format="%g", key="shiftx")
