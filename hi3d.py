@@ -237,12 +237,12 @@ def main():
                 roty_auto, shiftx_auto = auto_vertical_center(np.sum(data, axis=1))
                 if "rotx" in st.session_state: rotx_auto = st.session_state.rotx
                 if "roty" in st.session_state: roty_auto = st.session_state.roty
-                if "shiftx" in st.session_state: shiftx_auto = st.session_state.shiftx
-                if "shifty" in st.session_state: shifty_auto = st.session_state.shifty
+                if "shiftx" in st.session_state: shiftx_auto = st.session_state.shiftx/apix # unit: pixel
+                if "shifty" in st.session_state: shifty_auto = st.session_state.shifty/apix # unit: pixel
                 rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=round(rotx_auto,2), step=1.0, format="%g", key="rotx")
                 roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=round(roty_auto,2), step=1.0, format="%g", key="roty")
-                shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(min(max(-nx//2*apix, shiftx_auto*apix), nx//2*apix), 2), step=1.0, format="%g", key="shiftx")
-                shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=round(min(max(-ny//2*apix, shifty_auto*apix), ny//2*apix), 2), step=1.0, format="%g", key="shifty")
+                shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(min(max(-nx//2*apix, shiftx_auto*apix), nx//2*apix), 2), step=1.0, format="%g", key="shiftx")     # unit: Å
+                shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=round(min(max(-ny//2*apix, shifty_auto*apix), ny//2*apix), 2), step=1.0, format="%g", key="shifty")     # unit: Å
                 shiftz = st.number_input(label="Shift map along Z-axis (Å):", min_value=-nz//2*apix, max_value=nz//2*apix, value=0.0, step=1.0, format="%g", key="shiftz")
             else:
                 rotx, roty, shiftx, shifty, shiftz = 0., 0., 0., 0., 0.
