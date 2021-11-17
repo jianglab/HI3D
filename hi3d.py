@@ -64,7 +64,7 @@ def main():
         max_map_size = -1   # no limit
         max_map_dim  = -1
     if max_map_size>0:
-        warning_map_size = f"Due to the resource limit ({mem_quota():.1f} MB memory cap) of the free hosting service, the maximal map size should be {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less to avoid crashing the server process"
+        warning_map_size = f"Due to the resource limit ({mem_quota():.1f} MB memory cap) of the hosting service, the maximal map size should be {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less to avoid crashing the server process"
 
     msg_hint = f"There are a few things you can try:  \n"
     msg_hint+= f"· Ensure the map is vertical along Z-axis and centered in XY plane  \n"
@@ -90,13 +90,15 @@ def main():
         if max_map_size>0: help += f". {warning_map_size}"
         input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=2, help=help, key="input_mode")
         is_emd = False
+        emdb_ids_all, emdb_ids_helical, resolutions = get_emdb_ids()
         if input_mode == 0: # "upload a MRC file":
             label = "Upload a map in MRC or CCP4 format"
             help = None
             if max_map_size>0: help = warning_map_size
             fileobj = st.file_uploader(label, type=['mrc', 'map', 'map.gz'], help=help, key="file_upload")
             if fileobj is not None:
-                is_emd = fileobj.name.find("emd_")!=-1 or fileobj.name.find(".map")!=-1 
+                emd_id = extract_emd_id(fileobj.name)
+                is_emd = emd_id is not None and emd_id in emdb_ids_helical
                 data, apix = get_3d_map_from_uploaded_file(fileobj)
                 nz, ny, nx = data.shape
                 if nz<32:
@@ -107,20 +109,20 @@ def main():
             help = "An online url (http:// or ftp://) or a local file path (/path/to/your/structure.mrc)"
             if max_map_size>0: help += f". {warning_map_size}"
             url = st.text_input(label="Input the url of a 3D map:", value=url_default, help=help, key="url")
-            is_emd = url.find("emd_")!=-1 or url.find(".map")!=-1 
+            emd_id = extract_emd_id(url)
+            is_emd = emd_id is not None and emd_id in emdb_ids_helical
             with st.spinner(f'Downloading {url.strip()}'):
                 data, apix = get_3d_map_from_url(url.strip())
             nz, ny, nx = data.shape
             if nz<32:
                 st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
                 data = None
-        elif input_mode == 2:            
-            emdb_ids, resolutions = get_emdb_ids()
-            if not emdb_ids:
+        elif input_mode == 2:
+            if not emdb_ids_all:
                 st.warning("failed to obtained a list of helical structures in EMDB")
                 return
             url = "https://www.ebi.ac.uk/emdb/search/*%20AND%20structure_determination_method:%22helical%22?rows=10&sort=release_date%20desc"
-            st.markdown(f'[All {len(emdb_ids)} helical structures in EMDB]({url})')
+            st.markdown(f'[All {len(emdb_ids_helical)} helical structures in EMDB]({url})')
             emd_id_default = "emd-10499"
             do_random_embid = st.checkbox("Choose a random EMDB ID", value=False, key="random_embid")
             if do_random_embid:
@@ -129,25 +131,39 @@ def main():
                 button_clicked = st.button(label="Change EMDB ID", help=help)
                 if button_clicked:
                     import random
-                    st.session_state.emd_id = 'emd-' + random.choice(emdb_ids)
+                    st.session_state.emd_id = 'emd-' + random.choice(emdb_ids_helical)
             else:
                 help = None
                 if max_map_size>0: help = warning_map_size
                 label = "Input an EMDB ID (emd-xxxxx):"
                 emd_id = st.text_input(label=label, value=emd_id_default, key='emd_id', help=help)
                 emd_id = emd_id.lower().split("emd-")[-1]
-                if emd_id not in emdb_ids:
+                if emd_id not in emdb_ids_helical:
                     emd_id_bad = emd_id
                     import random
-                    emd_id = random.choice(emdb_ids)
-                    st.warning(f"EMD-{emd_id_bad} is not a helical structure. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')")
-                    return
+                    emd_id = random.choice(emdb_ids_helical)
+                    if emd_id not in emdb_ids_all:
+                        msg = f"EMD-{emd_id_bad} is not a valid EMDB entry. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')"
+                        st.warning(msg)
+                        return
+                    else:
+                        msg= f"EMD-{emd_id_bad} is in EMDB but not annotated as a helical structure" 
+                        st.warning(msg)
             if 'emd_id' in st.session_state: emd_id = st.session_state.emd_id
             else: emd_id = emd_id_default
             emd_id = emd_id.lower().split("emd-")[-1]
-            resolution = resolutions[emdb_ids.index(emd_id)]
+            resolution = resolutions[emdb_ids_all.index(emd_id)]
             msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id}) | resolution={resolution}Å'
             params = get_emdb_parameters(emd_id)
+            if max_map_size>0 and params and "nz" in params and "ny" in params and "nx" in params:
+                nz = params["nz"]
+                ny = params["ny"]
+                nx = params["nx"]
+                map_size = nz*ny*nx*4 / pow(2, 20)
+                if map_size>stop_map_size:
+                    msg_map_too_large = f"As the map size ({map_size:.1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit ({mem_quota():.1f} MB memory cap) of the hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
+                    msg_empty.warning(msg_map_too_large)
+                    st.stop()
             if params and is_amyloid(params, cutoff=6):
                 dz_auto = 0.2
             if params and "twist" in params and "rise" in params:
@@ -161,7 +177,7 @@ def main():
             if data is None:
                 st.warning(f"Failed to download [EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})")
                 return
-            is_emd = True
+            is_emd = emd_id in emdb_ids_helical
 
         if data is None:
             return
@@ -172,8 +188,8 @@ def main():
         if max_map_size>0:
             map_size = nz*ny*nx*4 / pow(2, 20)
             if map_size>stop_map_size:
-                msg= f"As the map size ({map_size:.1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit ({mem_quota():.1f} MB memory cap) of the free hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
-                msg_empty.warning(msg)
+                msg_map_too_large = f"As the map size ({map_size:.1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit ({mem_quota():.1f} MB memory cap) of the hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
+                msg_empty.warning(msg_map_too_large)
                 st.stop()
             elif map_size>max_map_size:
                 reduce_map_size = st.checkbox(f"Reduce map size to < {max_map_size} MB", value=True, key="reduce_map_size")
@@ -1172,18 +1188,31 @@ def get_3d_map_from_uploaded_file(fileobj):
         temp.write(fileobj.read())
         return get_3d_map_from_file(temp.name)
 
+def extract_emd_id(text):
+    import re
+    pattern = '.*emd_([0-9]*)\.map.*'
+    match = re.search(pattern, text, re.IGNORECASE)
+    if match:
+        emd_id = match.group(1)
+    else:
+        emd_id = None
+    return emd_id
+
 @st.experimental_singleton(show_spinner=False)
 def get_emdb_ids():
     try:
         import_with_auto_install(["pandas"])
         import pandas as pd
-        entries = pd.read_csv("https://www.ebi.ac.uk/emdb/api/search/*%20AND%20structure_determination_method:%22helical%22?wt=csv&download=true&fl=emdb_id,resolution")
-        emdb_ids = list(entries.iloc[:,0].str.split('-', expand=True).iloc[:, 1].values)
-        resolutions = entries.iloc[:,1].values
+        entries_all = pd.read_csv("https://www.ebi.ac.uk/emdb/api/search/*?wt=csv&download=true&fl=emdb_id,structure_determination_method,resolution")
+        entries_helical = entries_all[entries_all["structure_determination_method"]=="helical"]
+        emdb_ids_all     = list(entries_all.iloc[:,0].str.split('-', expand=True).iloc[:, 1].values)
+        emdb_ids_helical = list(entries_helical.iloc[:,0].str.split('-', expand=True).iloc[:, 1].values)
+        resolutions = entries_all.iloc[:,2].values
     except:
-        emdb_ids = []
+        emdb_ids_all = []
+        emdb_ids_helical = []
         resolutions = []
-    return emdb_ids, resolutions
+    return emdb_ids_all, emdb_ids_helical, resolutions
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_emdb_parameters(emd_id):
