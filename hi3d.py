@@ -497,17 +497,17 @@ def main():
             csym_auto = cn
         else:
             twist_auto, rise_auto, csym_auto = trc1
-            msg = f"The two automated methods with default parameters have failed to obtain consistent helical parameters using {npeaks} peaks. The two sollutions are:  \n"
+            msg = f"The two automated methods with default parameters have failed to obtain consistent helical parameters using {npeaks} peaks. The two solutions are:  \n"
             msg+= f"Twist per subunit:&emsp;&emsp;{round(trc1[0],2):>6.2f}&emsp;{round(trc2[0],2):>6.2f} °  \n"
             msg+= f"Rise &nbsp; per subunit:&emsp;&emsp;{round(trc1[1],2):>6.2f}&emsp;{round(trc2[1]):>6.2f} Å  \n"
-            msg+= f"Csym &emsp;&emsp;&emsp;&emsp;&emsp;:&emsp;&emsp;c{trc1[2]:5}&emsp;&emsp;c{trc2[2]:5}  \n  \n"
+            msg+= f"Csym &emsp;&emsp;&emsp;&emsp;&emsp;:&emsp;&emsp;c{int(trc1[2]):5}&emsp;&emsp;c{int(trc2[2]):5}  \n  \n"
             msg+= msg_hint
             msg_empty.warning(msg)
 
         twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function", key="twist")
         rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=float(round(rise_auto,2)), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function", key="rise")
         csym = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=int(csym_auto), step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function", key="csym"))
-        fig_indexing.title.text = f"twist={round(twist,2):g}°  rise={round(rise,2):g}Å  csym=c{csym}"
+        fig_indexing.title.text = f"twist={round(twist,2):g}°  rise={round(rise,2):g}Å  csym=c{int(csym):d}"
         fig_indexing.title.align = "center"
         fig_indexing.title.text_font_size = "24px"
         fig_indexing.title.text_font_style = "normal"
@@ -581,7 +581,7 @@ def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_
         for ch in crosshair: ch.line_color = crosshair_color
     return fig
 
-# do not cache - so that the random process is effective upon rerun
+@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False, suppress_st_warning=True)
 def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
     if len(peaks) < 3:
         #st.warning(f"WARNING: only {len(peaks)} peaks were found. At least 3 peaks are required")
@@ -764,7 +764,7 @@ def getHelicalLattice(peaks):
         #st.warning(f"failed to detect twist parameter using {len(peaks)} peaks")
         return (0, 0, 1)
 
-    return (twist, rise, cn)
+    return (twist, rise, int(cn))
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False, suppress_st_warning=True)
 def getGenericLattice(peaks):
@@ -911,7 +911,7 @@ def getGenericLattice(peaks):
         if cn>1 and abs(twist)>180./cn:
             if twist<0: twist+=360./cn
             elif twist>0: twist-=360./cn
-    return twist, rise, cn
+    return twist, rise, int(cn)
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def find_peaks(acf, da, dz, peak_width=9.0, peak_height=9.0, minmass=1.0, max_peaks=71):
