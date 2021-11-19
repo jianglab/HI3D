@@ -624,8 +624,10 @@ def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
         if trc_mean:
             _, trc1, trc2 = trc_mean
         else:
-            trc1 = (np.median([tmp[0] for tmp in trc1s]), np.median([tmp[1] for tmp in trc1s]), np.median([tmp[2] for tmp in trc1s]))
-            trc2 = (np.median([tmp[0] for tmp in trc2s]), np.median([tmp[1] for tmp in trc2s]), np.median([tmp[2] for tmp in trc2s]))
+            trc1s = np.array(trc1s)
+            trc2s = np.array(trc2s)
+            trc1 = list(geometric_median(X=trc1s[:,:2])) + [int(np.median(trc1s[:,2]))]
+            trc2 = list(geometric_median(X=trc2s[:,:2])) + [int(np.median(trc2s[:,2]))]
 
     twist1, rise1, cn1 = trc1
     twist1, rise1 = refine_twist_rise(acf_image=(acf, da, dz), twist=twist1, rise=rise1, cn=cn1)
@@ -1410,6 +1412,37 @@ def is_hosted(return_host=False):
         return hosted, host
     else:
         return hosted
+
+# https://stackoverflow.com/questions/30299267/geometric-median-of-multidimensional-points
+def geometric_median(X, eps=1e-5):
+    import numpy as np
+    from scipy.spatial.distance import cdist, euclidean
+    y = np.mean(X, 0)
+
+    while True:
+        D = cdist(X, [y])
+        nonzeros = (D != 0)[:, 0]
+
+        Dinv = 1 / D[nonzeros]
+        Dinvs = np.sum(Dinv)
+        W = Dinv / Dinvs
+        T = np.sum(W * X[nonzeros], 0)
+
+        num_zeros = len(X) - np.sum(nonzeros)
+        if num_zeros == 0:
+            y1 = T
+        elif num_zeros == len(X):
+            return y
+        else:
+            R = (T - y) * Dinvs
+            r = np.linalg.norm(R)
+            rinv = 0 if r == 0 else num_zeros/r
+            y1 = max(0, 1-rinv)*T + min(1, rinv)*y
+
+        if euclidean(y, y1) < eps:
+            return y1
+
+        y = y1
 
 def set_to_periodic_range(v, min=-180, max=180):
     from math import fmod
