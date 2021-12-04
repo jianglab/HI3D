@@ -233,17 +233,19 @@ def main():
 
             do_transform = st.checkbox("Center & verticalize", value= not (is_emd or is_hosted()), key="do_transform")
             if do_transform:
-                rotx_auto, shifty_auto = auto_vertical_center(np.sum(data, axis=2))
-                roty_auto, shiftx_auto = auto_vertical_center(np.sum(data, axis=1))
-                if "rotx" in st.session_state: rotx_auto = st.session_state.rotx
-                if "roty" in st.session_state: roty_auto = st.session_state.roty
-                if "shiftx" in st.session_state: shiftx_auto = st.session_state.shiftx/apix # unit: pixel
-                if "shifty" in st.session_state: shifty_auto = st.session_state.shifty/apix # unit: pixel
-                rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=round(rotx_auto,2), step=1.0, format="%g", key="rotx")
-                roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=round(roty_auto,2), step=1.0, format="%g", key="roty")
-                shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(min(max(-nx//2*apix, shiftx_auto*apix), nx//2*apix), 2), step=1.0, format="%g", key="shiftx")     # unit: Å
-                shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=round(min(max(-ny//2*apix, shifty_auto*apix), ny//2*apix), 2), step=1.0, format="%g", key="shifty")     # unit: Å
-                shiftz = st.number_input(label="Shift map along Z-axis (Å):", min_value=-nz//2*apix, max_value=nz//2*apix, value=0.0, step=1.0, format="%g", key="shiftz")
+                with st.form("do_transform_form"):
+                    rotx_auto, shifty_auto = auto_vertical_center(np.sum(data, axis=2))
+                    roty_auto, shiftx_auto = auto_vertical_center(np.sum(data, axis=1))
+                    if "rotx" in st.session_state: rotx_auto = st.session_state.rotx
+                    if "roty" in st.session_state: roty_auto = st.session_state.roty
+                    if "shiftx" in st.session_state: shiftx_auto = st.session_state.shiftx/apix # unit: pixel
+                    if "shifty" in st.session_state: shifty_auto = st.session_state.shifty/apix # unit: pixel
+                    rotx = st.number_input(label="Rotate map around X-axis (°):", min_value=-90., max_value=90., value=round(rotx_auto,2), step=1.0, format="%g", key="rotx")
+                    roty = st.number_input(label="Rotate map around Y-axis (°):", min_value=-90., max_value=90., value=round(roty_auto,2), step=1.0, format="%g", key="roty")
+                    shiftx = st.number_input(label="Shift map along X-axis (Å):", min_value=-nx//2*apix, max_value=nx//2*apix, value=round(min(max(-nx//2*apix, shiftx_auto*apix), nx//2*apix), 2), step=1.0, format="%g", key="shiftx")     # unit: Å
+                    shifty = st.number_input(label="Shift map along Y-axis (Å):", min_value=-ny//2*apix, max_value=ny//2*apix, value=round(min(max(-ny//2*apix, shifty_auto*apix), ny//2*apix), 2), step=1.0, format="%g", key="shifty")     # unit: Å
+                    shiftz = st.number_input(label="Shift map along Z-axis (Å):", min_value=-nz//2*apix, max_value=nz//2*apix, value=0.0, step=1.0, format="%g", key="shiftz")
+                    st.form_submit_button("Submit")
             else:
                 rotx, roty, shiftx, shifty, shiftz = 0., 0., 0., 0., 0.
 
@@ -1138,6 +1140,7 @@ def auto_vertical_center(image, max_angle=15):
     # refine dx 
     image_work = rotate_shift_image(data=image_work, angle=angle)
     y = np.sum(image_work, axis=0)
+    y -= y.min()
     n = len(y)
     from scipy.ndimage.measurements import center_of_mass
     cx = int(round(center_of_mass(y)[0]))
