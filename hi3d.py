@@ -320,6 +320,15 @@ def main():
                 st.warning(f"rmax(={rmax}) should be larger than rmin(={rmin})")
                 return
 
+        with st.expander(label="Download data", expanded=False):
+            import pandas as pd
+            st.download_button(
+                label="Radial profile",
+                data=pd.DataFrame(np.hstack((rad.reshape(len(rad), 1), radprofile.reshape(len(rad), 1))), columns=["radius (Å)", "density"]).round(6).to_csv().encode('utf-8'),
+                file_name='radial_profile.csv',
+                mime='text/csv',
+            )
+
         from bokeh.plotting import figure
         tools = 'box_zoom,crosshair,hover,pan,reset,save,wheel_zoom'
         tooltips = [("r", "@x{0.0}Å"), ("val", "@y{0.0}"),]
