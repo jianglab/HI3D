@@ -112,6 +112,7 @@ def main():
             emd_id = extract_emd_id(url)
             is_emd = emd_id is not None and emd_id in emdb_ids_helical
             with st.spinner(f'Downloading {url.strip()}'):
+                url = get_direct_url(url)    # convert cloud drive indirect url to direct url
                 data, apix = get_3d_map_from_url(url.strip())
             nz, ny, nx = data.shape
             if nz<32:
@@ -1283,11 +1284,11 @@ def get_emdb_map(emdid):
     data = get_3d_map_from_url(url)
     return data
 
-@st.experimental_singleton(show_spinner=False)
+@st.experimental_singleton(show_spinner=False, suppress_st_warning=True)
 def get_3d_map_from_url(url):
     ds = np.DataSource(None)
     if not ds.exists(url):
-        st.error(f"ERROR: {url} does not exist")
+        st.error(f"ERROR: {url} could not be downloaded. If this url points to a cloud drive file, make sure the link is a direct download link instead of a link for preview")
         st.stop()
     with ds.open(url) as fp:
         data = get_3d_map_from_file(fp.name)
@@ -1307,6 +1308,28 @@ def get_3d_map_from_file(filename):
         is3d = mrc.is_volume() or mrc.is_volume_stack()
         data = mrc.data
     return data, apix
+
+def get_direct_url(url):
+    import re
+    if url.startswith("https://drive.google.com/file/d/"):
+        hash = url.split("/")[5]
+        return f"https://drive.google.com/uc?export=download&id={hash}"
+    elif url.startswith("https://app.box.com/s/"):
+        hash = url.split("/")[-1]
+        return f"https://app.box.com/shared/static/{hash}"
+    elif url.startswith("https://www.dropbox.com"):
+        if url.find("dl=1")!=-1: return url
+        elif url.find("dl=0")!=-1: return url.replace("dl=0", "dl=1")
+        else: return url+"?dl=1"
+    elif url.find("sharepoint.com")!=-1 and url.find("guestaccess.aspx")!=-1:
+        return url.replace("guestaccess.aspx", "download.aspx")
+    elif url.startswith("https://1drv.ms"):
+        import base64
+        data_bytes64 = base64.b64encode(bytes(url, 'utf-8'))
+        data_bytes64_String = data_bytes64.decode('utf-8').replace('/','_').replace('+','-').rstrip("=")
+        return f"https://api.onedrive.com/v1.0/shares/u!{data_bytes64_String}/root/content"
+    else:
+        return url
 
 int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_arrow', 'show_cylproj', 'show_peaks', 'show_qr']
 float_types = ['ang_max', 'ang_min', 'da', 'dz', 'peak_width', 'peak_height', 'rise', 'rmax', 'rmin', 'shiftx', 'shifty', 'shiftz', 'rotx', 'roty', 'thresh', 'twist', 'z_max', 'z_min']
