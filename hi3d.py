@@ -90,7 +90,7 @@ def main():
         if max_map_size>0: help += f". {warning_map_size}"
         input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=2, help=help, key="input_mode")
         is_emd = False
-        emdb_ids_all, emdb_ids_helical, resolutions = get_emdb_ids()
+        emdb_ids_all, emdb_ids_helical, methods = get_emdb_ids()
         if input_mode == 0: # "upload a MRC file":
             label = "Upload a map in MRC or CCP4 format"
             help = None
@@ -112,7 +112,6 @@ def main():
             emd_id = extract_emd_id(url)
             is_emd = emd_id is not None and emd_id in emdb_ids_helical
             with st.spinner(f'Downloading {url.strip()}'):
-                url = get_direct_url(url)    # convert cloud drive indirect url to direct url
                 data, apix = get_3d_map_from_url(url.strip())
             nz, ny, nx = data.shape
             if nz<32:
@@ -139,23 +138,24 @@ def main():
                 label = "Input an EMDB ID (emd-xxxxx):"
                 emd_id = st.text_input(label=label, value=emd_id_default, key='emd_id', help=help)
                 emd_id = emd_id.lower().split("emd-")[-1]
-                if emd_id not in emdb_ids_helical:
-                    emd_id_bad = emd_id
+                if emd_id not in emdb_ids_all:
                     import random
-                    emd_id = random.choice(emdb_ids_helical)
-                    if emd_id not in emdb_ids_all:
-                        msg = f"EMD-{emd_id_bad} is not a valid EMDB entry. Please input a valid id (for example, a randomly selected valid id 'emd-{emd_id}')"
-                        st.warning(msg)
-                        return
-                    else:
-                        msg= f"EMD-{emd_id_bad} is in EMDB but not annotated as a helical structure" 
-                        st.warning(msg)
+                    msg = f"EMD-{emd_id} is not a valid EMDB entry. Please input a valid id (for example, a randomly selected valid id 'emd-{random.choice(emdb_ids_helical)}')"
+                    st.warning(msg)
+                    return
+                elif emd_id not in emdb_ids_helical:
+                    msg= f"EMD-{emd_id} is in EMDB but annotated as a '{methods[emdb_ids_all.index(emd_id)]}' structure, not a helical structure" 
+                    st.warning(msg)
             if 'emd_id' in st.session_state: emd_id = st.session_state.emd_id
             else: emd_id = emd_id_default
             emd_id = emd_id.lower().split("emd-")[-1]
-            resolution = resolutions[emdb_ids_all.index(emd_id)]
-            msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id}) | resolution={resolution}Å'
             params = get_emdb_parameters(emd_id)
+            if params is None:
+                msg = f"EMD-{emd_id}: could not retrieve information"
+                st.warning(msg)
+                return
+            resolution = params['resolution']
+            msg = f'[EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id}) | resolution={resolution}Å'
             if max_map_size>0 and params and "nz" in params and "ny" in params and "nx" in params:
                 nz = params["nz"]
                 ny = params["ny"]
@@ -173,7 +173,7 @@ def main():
             else:
                 msg +=  "  \n*helical params not available*"
             st.markdown(msg)
-            with st.spinner(f'Downloading EMD-{emd_id}'):
+            with st.spinner(f'Downloading EMD-{emd_id} from {get_emdb_map_url(emd_id)}'):
                 data, apix = get_emdb_map(emd_id)
             if data is None:
                 st.warning(f"Failed to download [EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})")
@@ -491,7 +491,7 @@ def main():
         h2 = 900   # final plot height
         w2 = int(round(w * h2/h))//2*2
         x_axis_label="twist (°)"
-        y_axis_label="reise (Å)"
+        y_axis_label="rise (Å)"
         tooltips = [("twist", "$x°"), ('rise', '$yÅ'), ('acf', '@image')]
         fig_indexing = generate_bokeh_figure(image=acf, dx=da, dy=dz, title="", title_location="above", plot_width=None, plot_height=None, x_axis_label=x_axis_label, y_axis_label=y_axis_label, tooltips=tooltips, show_axis=True, show_toolbar=True, crosshair_color="white", aspect_ratio=w/h)
 
@@ -1218,16 +1218,16 @@ def get_emdb_ids():
     try:
         import_with_auto_install(["pandas"])
         import pandas as pd
-        entries_all = pd.read_csv("https://www.ebi.ac.uk/emdb/api/search/*?wt=csv&download=true&fl=emdb_id,structure_determination_method,resolution")
+        entries_all = pd.read_csv('https://www.ebi.ac.uk/emdb/api/search/current_status:"REL"?wt=csv&download=true&fl=emdb_id,structure_determination_method,resolution')
+        methods = list(entries_all["structure_determination_method"])
         entries_helical = entries_all[entries_all["structure_determination_method"]=="helical"]
         emdb_ids_all     = list(entries_all.iloc[:,0].str.split('-', expand=True).iloc[:, 1].values)
         emdb_ids_helical = list(entries_helical.iloc[:,0].str.split('-', expand=True).iloc[:, 1].values)
-        resolutions = entries_all.iloc[:,2].values
     except:
         emdb_ids_all = []
         emdb_ids_helical = []
-        resolutions = []
-    return emdb_ids_all, emdb_ids_helical, resolutions
+        methods = {}
+    return emdb_ids_all, emdb_ids_helical, methods
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
 def get_emdb_parameters(emd_id):
@@ -1243,21 +1243,20 @@ def get_emdb_parameters(emd_id):
     except:
         return None
     ret = {}
-    try:
-        ret['sample'] = data['emdEntry']['sample']['name']
-        ret["resolution"] = float(data['emdEntry']['processing']['reconstruction']['resolutionByAuthor'])
-        dimensions = data['emdEntry']['map']['dimensions']
-        ret["nz"] = int(dimensions["numSections"])
-        ret["ny"] = int(dimensions["numRows"])
-        ret["nx"] = int(dimensions["numColumns"])
+    ret['sample'] = data['emdEntry']['sample']['name']
+    ret["method"] = data['emdEntry']['processing']['method']
+    ret["resolution"] = float(data['emdEntry']['processing']['reconstruction']['resolutionByAuthor'])
+    dimensions = data['emdEntry']['map']['dimensions']
+    ret["nz"] = int(dimensions["numSections"])
+    ret["ny"] = int(dimensions["numRows"])
+    ret["nx"] = int(dimensions["numColumns"])
+    if 'helicalParameters' in data['emdEntry']['experiment']['specimenPreparation']:
         helical_parameters = data['emdEntry']['experiment']['specimenPreparation']['helicalParameters']
         assert(helical_parameters['deltaPhi']['@units'] == 'degrees')
         assert(helical_parameters['deltaZ']['@units'] == 'A')
         ret["twist"] = float(helical_parameters['deltaPhi']['#text'])
         ret["rise"] = float(helical_parameters['deltaZ']['#text'])
         ret["csym"] = int(helical_parameters['axialSymmetry'][1:])
-    except:
-        pass
     return ret
 
 def is_amyloid(params, cutoff=6):
@@ -1275,19 +1274,25 @@ def is_amyloid(params, cutoff=6):
             if sample.find(target)!=-1: return True
     return False
 
-def get_emdb_map(emdid):
+def get_emdb_map_url(emdid):
     emdid_number = emdid.lower().split("emd-")[-1]
     server = "https://ftp.wwpdb.org/pub"    # Rutgers University, USA
     #server = "https://ftp.ebi.ac.uk/pub/databases" # European Bioinformatics Institute, England
     #server = "http://ftp.pdbj.org/pub" # Osaka University, Japan
     url = f"{server}/emdb/structures/EMD-{emdid_number}/map/emd_{emdid_number}.map.gz"
+    return url
+
+@st.experimental_singleton(show_spinner=False, suppress_st_warning=True)
+def get_emdb_map(emdid):
+    url = get_emdb_map_url(emdid)
     data = get_3d_map_from_url(url)
     return data
 
 @st.experimental_singleton(show_spinner=False, suppress_st_warning=True)
 def get_3d_map_from_url(url):
+    url_final = get_direct_url(url)    # convert cloud drive indirect url to direct url
     ds = np.DataSource(None)
-    if not ds.exists(url):
+    if not ds.exists(url_final):
         st.error(f"ERROR: {url} could not be downloaded. If this url points to a cloud drive file, make sure the link is a direct download link instead of a link for preview")
         st.stop()
     with ds.open(url) as fp:
