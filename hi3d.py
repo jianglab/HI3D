@@ -1243,21 +1243,26 @@ def get_emdb_parameters(emd_id):
     except:
         return None
     ret = {}
-    ret['sample'] = data['emdEntry']['sample']['name']
-    ret["method"] = data['emdEntry']['processing']['method']
-    ret["resolution"] = float(data['emdEntry']['processing']['reconstruction']['resolutionByAuthor'])
-    dimensions = data['emdEntry']['map']['dimensions']
-    ret["nz"] = int(dimensions["numSections"])
-    ret["ny"] = int(dimensions["numRows"])
-    ret["nx"] = int(dimensions["numColumns"])
-    if 'helicalParameters' in data['emdEntry']['experiment']['specimenPreparation']:
-        helical_parameters = data['emdEntry']['experiment']['specimenPreparation']['helicalParameters']
-        assert(helical_parameters['deltaPhi']['@units'] == 'degrees')
-        assert(helical_parameters['deltaZ']['@units'] == 'A')
-        ret["twist"] = float(helical_parameters['deltaPhi']['#text'])
-        ret["rise"] = float(helical_parameters['deltaZ']['#text'])
-        ret["csym"] = int(helical_parameters['axialSymmetry'][1:])
-    return ret
+    try:
+      ret['sample'] = data['emd']['sample']['name']
+      ret["method"] = data['emd']['structure_determination_list']['structure_determination']['method']
+      dimensions = data['emd']['map']['dimensions']
+      ret["nz"] = int(dimensions["sec"])
+      ret["ny"] = int(dimensions["row"])
+      ret["nx"] = int(dimensions["col"])
+      res_dict = dict_recursive_search(data, 'resolution')
+      if res_dict:
+        ret["resolution"] = float(res_dict['#text'])
+      if ret["method"] == 'helical':
+          #ret["resolution"] = float(data['emd']['structure_determination_list']['structure_determination']['helical_processing']['final_reconstruction']['resolution']['#text'])
+          helical_parameters = data['emd']['structure_determination_list']['structure_determination']['helical_processing']['final_reconstruction']['applied_symmetry']['helical_parameters']
+          assert(helical_parameters['delta_phi']['@units'] == 'deg')
+          assert(helical_parameters['delta_z']['@units'] == 'Å')
+          ret["twist"] = float(helical_parameters['delta_phi']['#text'])
+          ret["rise"] = float(helical_parameters['delta_z']['#text'])
+          ret["csym"] = int(helical_parameters['axial_symmetry'][1:])
+    finally:
+      return ret
 
 def is_amyloid(params, cutoff=6):
     if "twist" in params and "rise" in params:
@@ -1362,6 +1367,19 @@ def parse_query_parameters():
             st.session_state[attr] = float(query_params[attr][0])
         else:
             st.session_state[attr] = query_params[attr][0]
+
+def dict_recursive_search(d, key, default=None):
+    stack = [iter(d.items())]
+    while stack:
+        for k, v in stack[-1]:
+            if k == key:          
+                return v
+            elif isinstance(v, dict):
+                stack.append(iter(v.items()))
+                break
+        else:
+            stack.pop()
+    return default
 
 def qr_code(url=None, size = 8):
     import_with_auto_install(["qrcode"])
