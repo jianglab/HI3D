@@ -64,7 +64,7 @@ def main():
         max_map_size = -1   # no limit
         max_map_dim  = -1
     if max_map_size>0:
-        warning_map_size = f"Due to the resource limit ({mem_quota():.1f} MB memory cap) of the hosting service, the maximal map size should be {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less to avoid crashing the server process"
+        warning_map_size = f"Due to the resource limit ({mem_quota():.1f} MB memory cap) of the hosting service, the maximal map size should be {max_map_size:.1f} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less to avoid crashing the server process"
 
     msg_hint = f"There are a few things you can try:  \n"
     msg_hint+= f"· Ensure the map is vertical along Z-axis and centered in XY plane  \n"
@@ -86,7 +86,7 @@ def main():
         # make radio display horizontal
         st.markdown('<style>div.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
         input_modes = {0:"upload", 1:"url", 2:"emd-xxxxx"}
-        help = "Only maps in MRC (*\*.mrc*) or CCP4 (*\*.map*) format are supported. Compressed maps (*\*.gz*) will be automatically decompressed"
+        help = "Only maps in MRC (.mrc) or CCP4 (.map) format are supported. Compressed maps (.gz) will be automatically decompressed"
         if max_map_size>0: help += f". {warning_map_size}"
         input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=2, help=help, key="input_mode")
         is_emd = False
@@ -426,7 +426,7 @@ def main():
 
         cylproj_square = make_square_shape(cylproj_work)
         del cylproj_work
-        acf = auto_correlation(cylproj_square, high_pass_fraction=1./cylproj_square.shape[0])
+        acf = auto_correlation(cylproj_square, sqrt=True, high_pass_fraction=1./cylproj_square.shape[0])
         del cylproj_square
         show_acf = st.checkbox(label="ACF", value=True, help="Display the auto-correlation function (ACF)", key="show_acf")
         if show_acf:
@@ -974,10 +974,11 @@ def find_peaks(acf, da, dz, peak_width=9.0, peak_height=9.0, minmass=1.0, max_pe
     return peaks, f["mass"]
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
-def auto_correlation(data, high_pass_fraction=0):
+def auto_correlation(data, sqrt=False, high_pass_fraction=0):
     from scipy.signal import correlate2d
     fft = np.fft.rfft2(data)
     product = fft*np.conj(fft)
+    if sqrt: product = np.sqrt(product)
     if 0<high_pass_fraction<=1:
         nz, na = product.shape
         Z, A = np.meshgrid(np.arange(-nz//2, nz//2, dtype=float), np.arange(-na//2, na//2, dtype=float), indexing='ij')
@@ -988,6 +989,8 @@ def auto_correlation(data, high_pass_fraction=0):
         product *= np.fft.fftshift(filter)
     corr = np.fft.fftshift(np.fft.irfft2(product))
     corr -= np.median(corr, axis=1, keepdims=True)
+    corr = normalize(corr)
+    corr = np.power(np.log1p(corr), 1/3)   # make weaker peaks brighter
     corr = normalize(corr)
     return corr
 
@@ -1256,8 +1259,8 @@ def get_emdb_parameters(emd_id):
       if ret["method"] == 'helical':
           #ret["resolution"] = float(data['emd']['structure_determination_list']['structure_determination']['helical_processing']['final_reconstruction']['resolution']['#text'])
           helical_parameters = data['emd']['structure_determination_list']['structure_determination']['helical_processing']['final_reconstruction']['applied_symmetry']['helical_parameters']
-          assert(helical_parameters['delta_phi']['@units'] == 'deg')
-          assert(helical_parameters['delta_z']['@units'] == 'Å')
+          #assert(helical_parameters['delta_phi']['@units'] == 'deg')
+          #assert(helical_parameters['delta_z']['@units'] == 'Å')
           ret["twist"] = float(helical_parameters['delta_phi']['#text'])
           ret["rise"] = float(helical_parameters['delta_z']['#text'])
           ret["csym"] = int(helical_parameters['axial_symmetry'][1:])
@@ -1353,7 +1356,7 @@ def set_query_parameters():
         if attr in int_types or isinstance(v, bool):
             d[attr] = int(v)
         elif attr in float_types:
-            d[attr] = float(v)
+            d[attr] = f'{float(v):g}'
         else:
             d[attr] = v
     st.experimental_set_query_params(**d)
