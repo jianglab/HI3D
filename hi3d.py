@@ -552,6 +552,7 @@ def main():
 
     with col2:
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
+        st.markdown("Please cite: *Sun, C., Gonzalez, B., & Jiang, W. (2022). Helical Indexing in Real Space. Scientific Reports, 12(1), 1–11. https://doi.org/10.1038/s41598-022-11382-7*")
 
     server_info_empty.markdown(server_info.format(mem_used=mem_used()))
 
