@@ -426,11 +426,14 @@ def main():
 
         cylproj_square = make_square_shape(cylproj_work)
         del cylproj_work
-        acf = auto_correlation(cylproj_square, sqrt=True, high_pass_fraction=1./cylproj_square.shape[0])
-        del cylproj_square
         show_acf = st.checkbox(label="ACF", value=True, help="Display the auto-correlation function (ACF)", key="show_acf")
+        show_scf = False
         if show_acf:
+            show_scf = st.checkbox(label="SCF", value=False, help="Use the self-correlation function (SCF) variant of ACF (e.g. |F|->sqrt(|F|)", key="show_scf")
             show_peaks_empty = st.empty()
+
+        acf = auto_correlation(cylproj_square, sqrt=show_scf, high_pass_fraction=1./cylproj_square.shape[0])
+        del cylproj_square
 
         peaks, _ = find_peaks(acf, da=da, dz=dz, peak_width=peak_width, peak_height=peak_height, minmass=1.0)
         if peaks is not None:
@@ -991,8 +994,9 @@ def auto_correlation(data, sqrt=False, high_pass_fraction=0):
     corr = np.fft.fftshift(np.fft.irfft2(product))
     corr -= np.median(corr, axis=1, keepdims=True)
     corr = normalize(corr)
-    corr = np.power(np.log1p(corr), 1/3)   # make weaker peaks brighter
-    corr = normalize(corr)
+    if sqrt:
+        corr = np.power(np.log1p(corr), 1/3)   # make weaker peaks brighter
+        corr = normalize(corr)
     return corr
 
 @st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
@@ -1345,9 +1349,9 @@ def get_direct_url(url):
     else:
         return url
 
-int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_arrow', 'show_cylproj', 'show_peaks', 'show_qr']
+int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_scf', 'show_arrow', 'show_cylproj', 'show_peaks', 'show_qr']
 float_types = ['ang_max', 'ang_min', 'da', 'dz', 'peak_width', 'peak_height', 'rise', 'rmax', 'rmin', 'shiftx', 'shifty', 'shiftz', 'rotx', 'roty', 'thresh', 'twist', 'z_max', 'z_min']
-default_values = {'csym':1, 'do_threshold':0, 'do_transform':0, 'input_mode':2, 'npeaks':71, 'random_embid':1, 'section_axis':2, 'share_url':0, 'show_acf':1, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'show_qr':0, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'peak_width':9.0, 'peak_height':9.0, 'rmin':0, 'shiftx':0, 'shifty':0, 'shiftz':0, 'rotx':0, 'roty':0, 'thresh':0, 'z_max':-180., 'z_min':180.}
+default_values = {'csym':1, 'do_threshold':0, 'do_transform':0, 'input_mode':2, 'npeaks':71, 'random_embid':1, 'section_axis':2, 'share_url':0, 'show_acf':1, 'show_scf':0, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'show_qr':0, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'peak_width':9.0, 'peak_height':9.0, 'rmin':0, 'shiftx':0, 'shifty':0, 'shiftz':0, 'rotx':0, 'roty':0, 'thresh':0, 'z_max':-180., 'z_min':180.}
 def set_query_parameters():
     d = {}
     attrs = sorted(st.session_state.keys())
