@@ -83,12 +83,10 @@ def main():
         data = None
         da_auto = 1.0
         dz_auto = 1.0
-        # make radio display horizontal
-        st.markdown('<style>div.row-widget.stRadio > div{flex-direction:row;}</style>', unsafe_allow_html=True)
         input_modes = {0:"upload", 1:"url", 2:"emd-xxxxx"}
         help = "Only maps in MRC (.mrc) or CCP4 (.map) format are supported. Compressed maps (.gz) will be automatically decompressed"
         if max_map_size>0: help += f". {warning_map_size}"
-        input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=2, help=help, key="input_mode")
+        input_mode = st.radio(label="How to obtain the input map:", options=list(input_modes.keys()), format_func=lambda i:input_modes[i], index=2, horizontal=True, help=help, key="input_mode")
         is_emd = False
         emdb_ids_all, emdb_ids_helical, methods = get_emdb_ids()
         if input_mode == 0: # "upload a MRC file":
@@ -124,31 +122,25 @@ def main():
             url = "https://www.ebi.ac.uk/emdb/search/*%20AND%20structure_determination_method:%22helical%22?rows=10&sort=release_date%20desc"
             st.markdown(f'[All {len(emdb_ids_helical)} helical structures in EMDB]({url})')
             emd_id_default = "emd-10499"
-            do_random_embid = st.checkbox("Choose a random EMDB ID", value=False, key="random_embid")
-            if do_random_embid:
-                help = "Randomly select another helical structure in EMDB"
-                if max_map_size>0: help += f". {warning_map_size}"
-                button_clicked = st.button(label="Change EMDB ID", help=help)
-                if button_clicked:
-                    import random
-                    st.session_state.emd_id = 'emd-' + random.choice(emdb_ids_helical)
-            else:
-                help = None
-                if max_map_size>0: help = warning_map_size
-                label = "Input an EMDB ID (emd-xxxxx):"
-                emd_id = st.text_input(label=label, value=emd_id_default, key='emd_id', help=help)
-                emd_id = emd_id.lower().split("emd-")[-1]
-                if emd_id not in emdb_ids_all:
-                    import random
-                    msg = f"EMD-{emd_id} is not a valid EMDB entry. Please input a valid id (for example, a randomly selected valid id 'emd-{random.choice(emdb_ids_helical)}')"
-                    st.warning(msg)
-                    return
-                elif emd_id not in emdb_ids_helical:
-                    msg= f"EMD-{emd_id} is in EMDB but annotated as a '{methods[emdb_ids_all.index(emd_id)]}' structure, not a helical structure" 
-                    st.warning(msg)
-            if 'emd_id' in st.session_state: emd_id = st.session_state.emd_id
-            else: emd_id = emd_id_default
+            help = "Randomly select another helical structure in EMDB"
+            if max_map_size>0: help += f". {warning_map_size}"
+            button_clicked = st.button(label="Change EMDB ID", help=help)
+            if button_clicked:
+                import random
+                st.session_state.emd_id = 'emd-' + random.choice(emdb_ids_helical)
+            help = None
+            if max_map_size>0: help = warning_map_size
+            label = "Input an EMDB ID (emd-xxxxx):"
+            emd_id = st.text_input(label=label, value=emd_id_default, key='emd_id', help=help)
             emd_id = emd_id.lower().split("emd-")[-1]
+            if emd_id not in emdb_ids_all:
+                import random
+                msg = f"EMD-{emd_id} is not a valid EMDB entry. Please input a valid id (for example, a randomly selected valid id 'emd-{random.choice(emdb_ids_helical)}')"
+                st.warning(msg)
+                return
+            elif emd_id not in emdb_ids_helical:
+                msg= f"EMD-{emd_id} is in EMDB but annotated as a '{methods[emdb_ids_all.index(emd_id)]}' structure, not a helical structure" 
+                st.warning(msg)
             params = get_emdb_parameters(emd_id)
             if params is None:
                 msg = f"EMD-{emd_id}: could not retrieve information"
@@ -212,7 +204,7 @@ def main():
             st.stop()
 
         axis_mapping = {2:'X', 1:'Y', 0:'Z'}
-        section_axis = st.radio(label="Display a section along this axis:", options=list(axis_mapping.keys()), format_func=lambda i:axis_mapping[i], index=0, key="section_axis")
+        section_axis = st.radio(label="Display a section along this axis:", options=list(axis_mapping.keys()), format_func=lambda i:axis_mapping[i], index=0, horizontal=True, key="section_axis")
         mapping = {0:nz, 1:ny, 2:nx}
         n = mapping[section_axis]
         section_index = st.slider(label="Choose a section to display:", min_value=1, max_value=n, value=n//2+1, step=1)
@@ -522,10 +514,14 @@ def main():
         twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function", key="twist")
         rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=float(round(rise_auto,2)), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function", key="rise")
         csym = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=int(csym_auto), step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function", key="csym"))
-        fig_indexing.title.text = f"twist={round(twist,2):g}°  rise={round(rise,2):g}Å  csym=c{int(csym):d}"
+        fig_indexing.title.text = f"twist={round(twist,2):g}° (pitch={round(360/abs(twist)*rise, 2):g}Å) rise={round(rise,2):g}Å  csym=c{int(csym):d}"
         fig_indexing.title.align = "center"
         fig_indexing.title.text_font_size = "24px"
         fig_indexing.title.text_font_style = "normal"
+        fig_indexing.xaxis.axis_label_text_font_size = "16pt"
+        fig_indexing.yaxis.axis_label_text_font_size = "16pt"
+        fig_indexing.xaxis.major_label_text_font_size = "12pt"
+        fig_indexing.yaxis.major_label_text_font_size = "12pt"
         fig_indexing.hover[0].attachment = "vertical"
 
         show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True, help="Show an arrow in the central panel from the center to the first lattice point corresponding to the helical twist/rise", key="show_arrow")
