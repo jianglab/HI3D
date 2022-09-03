@@ -49,6 +49,11 @@ gc.enable()
 def main():
     title = "HI3D: Helical indexing using the cylindrical projection of a 3D map"
     st.set_page_config(page_title=title, layout="wide")
+
+    hosted, host = is_hosted(return_host=True)
+    if hosted and host in ['heroku']:
+        st.error(f"This app hosted on Heroku will be unavailable starting November 28, 2022 [when Heroku discontinues free hosting service](https://blog.heroku.com/next-chapter). Please switch to [the same app hosted elsewhere](https://jianglab-hi3d-streamlit-app-902emw.streamlitapp.com)")
+
     st.title(title)
 
     st.elements.utils._shown_default_value_warning = True
