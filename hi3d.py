@@ -208,11 +208,12 @@ def main():
             st.warning(f"The map is blank: min={vmin} max={vmax}. Please provide a meaningful 3D map")
             st.stop()
 
-        axis_mapping = {2:'X', 1:'Y', 0:'Z'}
+        axis_mapping = {3:'X/Y', 2:'X', 1:'Y', 0:'Z'}
         section_axis = st.radio(label="Display a section along this axis:", options=list(axis_mapping.keys()), format_func=lambda i:axis_mapping[i], index=0, horizontal=True, key="section_axis")
-        mapping = {0:nz, 1:ny, 2:nx}
+        mapping = {0:nz, 1:ny, 2:nx, 3:min(nx,ny)}
         n = mapping[section_axis]
-        section_index = st.slider(label="Choose a section to display:", min_value=1, max_value=n, value=n//2+1, step=1)
+        section_index = st.slider(label="Choose a section to display:", min_value=-n//2, max_value=n-n//2-1, value=0, step=1)
+        section_index += n//2
         container_image = st.container()
         
         expanded = False if is_emd else True
@@ -247,15 +248,28 @@ def main():
             else:
                 rotx, roty, shiftx, shifty, shiftz = 0., 0., 0., 0., 0.
 
-        image = np.squeeze(np.take(data, indices=[section_index-1], axis=section_axis))
+        if section_axis == 3:
+            image = np.squeeze(np.take(data, indices=[section_index], axis=2))
+            image_y = np.squeeze(np.take(data, indices=[section_index], axis=1))
+            image[:, ny//2:]= image_y[:, nx//2:]
+            image[:, ny//2-1] = 0
+        else:
+            image = np.squeeze(np.take(data, indices=[section_index], axis=section_axis))
+
         h, w = image.shape
         if thresh is not None or rotx or roty or shiftx or shifty or shiftz:
             data = transform_map(data, shift_x=shiftx/apix, shift_y=-shifty/apix, shift_z=-shiftz/apix, angle_x=-rotx, angle_y=-roty)
-            image2 = np.squeeze(np.take(data, indices=[section_index-1], axis=section_axis))
+            if section_axis == 3:
+                image2 = np.squeeze(np.take(data, indices=[section_index], axis=2))
+                image2_y = np.squeeze(np.take(data, indices=[section_index], axis=1))
+                image2[:, ny//2:]= image2_y[:, nx//2:]
+                image2[:, ny//2-1] = 0
+            else:
+                image2 = np.squeeze(np.take(data, indices=[section_index], axis=section_axis))
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
-                fig1 = generate_bokeh_figure(image, apix, apix, title=f"Original", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
-                fig2 = generate_bokeh_figure(image2, apix, apix, title=f"Transformed", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
+                fig1 = generate_bokeh_figure(image, apix, apix, title=f"Original", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_angle_tooltip=True, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
+                fig2 = generate_bokeh_figure(image2, apix, apix, title=f"Transformed", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_angle_tooltip=True, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
 
                 from bokeh.plotting import figure
                 x = (np.arange(0, w)-w//2) * apix
@@ -348,7 +362,7 @@ def main():
             server_info_empty = st.empty()
             #server_info = f"Host: {get_hostname()}  \n"
             #server_info+= f"Account: {get_username()}"
-            server_info = f"Uptime: {uptime():.1f} s  \n"
+            server_info = f"Uptime: {up_time():.1f} s  \n"
             server_info+= f"Mem (total): {mem_info()[0]:.1f} MB  \n"
             server_info+= f"Mem (quota): {mem_quota():.1f} MB  \n"
             server_info+= "Mem (used): {mem_used:.1f} MB"
@@ -560,7 +574,7 @@ def main():
 
     server_info_empty.markdown(server_info.format(mem_used=mem_used()))
 
-def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, x_axis_label='x', y_axis_label='y', tooltips=None, show_axis=True, show_toolbar=True, crosshair_color="white", aspect_ratio=None):
+def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_width=None, plot_height=None, x_axis_label='x', y_axis_label='y', tooltips=None, show_angle_tooltip=False, show_axis=True, show_toolbar=True, crosshair_color="white", aspect_ratio=None):
     from bokeh.plotting import figure
     h, w = image.shape
     if aspect_ratio is None and (plot_width and plot_height):
@@ -581,18 +595,33 @@ def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_
     if not show_toolbar: fig.toolbar_location = None
 
     source_data = dict(image=[image], x=[-w//2*dx], y=[-h//2*dy], dw=[w*dx], dh=[h*dy])
-    from bokeh.models import LinearColorMapper
-    color_mapper = LinearColorMapper(palette='Greys256')    # Greys256, Viridis256
-    image = fig.image(source=source_data, image='image', color_mapper=color_mapper,
-                x='x', y='y', dw='dw', dh='dh'
-            )
 
     # add hover tool only for the image
     from bokeh.models.tools import HoverTool, CrosshairTool
-    if not tooltips:
-        tooltips = [("x", "$x°"), ('y', '$yÅ'), ('val', '@image')]
-    image_hover = HoverTool(renderers=[image], tooltips=tooltips)
+    if tooltips is not None and show_angle_tooltip:
+        tooltips = tooltips + [("angle", '°')]
+    from bokeh.models import LinearColorMapper
+    color_mapper = LinearColorMapper(palette='Greys256')    # Greys256, Viridis256
+    fig_image = fig.image(source=source_data, image='image', color_mapper=color_mapper, x='x', y='y', dw='dw', dh='dh')
+
+    image_hover = HoverTool(renderers=[fig_image], tooltips=tooltips)
     fig.add_tools(image_hover)
+
+    # avoid the need for embedding angle image -> smaller fig object and less data to transfer
+    if tooltips is not None and show_angle_tooltip:
+        mousemove_callback_code = """
+        var x = cb_obj.x
+        var y = cb_obj.y
+        var angle = Math.atan2(y, x) * 180 / Math.PI - 90
+        if (angle < -180) angle += 360
+        angle = Math.round(angle*10)/10
+        hover.tooltips[hover.tooltips.length - 1][1] = angle.toString() + "°"
+        """
+        from bokeh.models import CustomJS
+        from bokeh.events import MouseMove
+        mousemove_callback = CustomJS(args={"hover":fig.hover[0]}, code=mousemove_callback_code)
+        fig.js_on_event(MouseMove, mousemove_callback)
+
     crosshair = [t for t in fig.tools if isinstance(t, CrosshairTool)]
     if crosshair: 
         for ch in crosshair: ch.line_color = crosshair_color
@@ -1448,10 +1477,12 @@ def mem_used():
     mem = Process(getpid()).memory_info().rss / 1024**2   # MB
     return mem
 
-def uptime():
+def up_time():
     import_with_auto_install(["uptime"])
     from uptime import uptime
-    return uptime()
+    t = uptime()
+    if t is None: return 0
+    else: return t
 
 def get_username():
     from getpass import getuser
