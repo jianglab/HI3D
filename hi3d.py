@@ -1,7 +1,7 @@
 """ 
 MIT License
 
-Copyright (c) 2020-2021 Wen Jiang
+Copyright (c) 2020-2023 Wen Jiang
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -41,7 +41,8 @@ import_with_auto_install(required_packages)
 import streamlit as st
 import numpy as np
 from scipy.ndimage import map_coordinates
-import math, random, gc
+import math, random
+import gc
 gc.enable()
 
 #from memory_profiler import profile
@@ -52,7 +53,7 @@ def main():
 
     hosted, host = is_hosted(return_host=True)
     if hosted and host in ['heroku']:
-        st.error(f"This app hosted on Heroku will be unavailable starting November 28, 2022 [when Heroku discontinues free hosting service](https://blog.heroku.com/next-chapter). Please switch to [the same app hosted elsewhere](https://jianglab-hi3d-streamlit-app-902emw.streamlitapp.com)")
+        st.error(f"This app hosted on Heroku will be unavailable starting November 28, 2022 [when Heroku discontinues free hosting service](https://blog.heroku.com/next-chapter). Please switch to [the same app hosted elsewhere](https://helical-indexing-hi3d.streamlit.app)")
 
     st.title(title)
 
@@ -569,7 +570,7 @@ def main():
         st.experimental_set_query_params()
 
     with col2:
-        st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to Wen Jiang (jiang12 at purdue.edu)*")
+        st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to [HI3D@GitHub](https://github.com/jianglab/hi3d/issues)*")
         st.markdown("Please cite: *Sun, C., Gonzalez, B., & Jiang, W. (2022). Helical Indexing in Real Space. Scientific Reports, 12(1), 1–11. https://doi.org/10.1038/s41598-022-11382-7*")
 
     server_info_empty.markdown(server_info.format(mem_used=mem_used()))
@@ -627,7 +628,7 @@ def generate_bokeh_figure(image, dx, dy, title="", title_location="below", plot_
         for ch in crosshair: ch.line_color = crosshair_color
     return fig
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False, suppress_st_warning=True)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def fitHelicalLattice(peaks, acf, da=1.0, dz=1.0):
     if len(peaks) < 3:
         #st.warning(f"WARNING: only {len(peaks)} peaks were found. At least 3 peaks are required")
@@ -722,7 +723,7 @@ def consistent_twist_rise_cn_sets(twist_rise_cn_set_1, twist_rise_cn_set_2, epsi
             if trc: return (trc, twist_rise_cn_1, twist_rise_cn_2)
     return None
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def refine_twist_rise(acf_image, twist, rise, cn):
     from scipy.optimize import minimize
     if rise<=0: return twist, rise
@@ -750,7 +751,7 @@ def refine_twist_rise(acf_image, twist, rise, cn):
     twist_opt = set_to_periodic_range(twist_opt, min=-180, max=180)
     return twist_opt, rise_opt
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False, suppress_st_warning=True)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def getHelicalLattice(peaks):
     if len(peaks) < 3:
         #st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
@@ -814,7 +815,7 @@ def getHelicalLattice(peaks):
 
     return (twist, rise, int(cn))
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False, suppress_st_warning=True)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def getGenericLattice(peaks):
     if len(peaks) < 3:
         #st.warning(f"only {len(peaks)} peaks were found. At least 3 peaks are required")
@@ -961,7 +962,7 @@ def getGenericLattice(peaks):
             elif twist>0: twist-=360./cn
     return twist, rise, int(cn)
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def find_peaks(acf, da, dz, peak_width=9.0, peak_height=9.0, minmass=1.0, max_peaks=71):
     import_with_auto_install(["trackpy"])
     from trackpy import locate, refine_com
@@ -1007,7 +1008,7 @@ def find_peaks(acf, da, dz, peak_width=9.0, peak_height=9.0, minmass=1.0, max_pe
     peaks[:, 1] *= dz  # the values are now in Angstrom
     return peaks, f["mass"]
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def auto_correlation(data, sqrt=False, high_pass_fraction=0):
     from scipy.signal import correlate2d
     fft = np.fft.rfft2(data)
@@ -1029,7 +1030,7 @@ def auto_correlation(data, sqrt=False, high_pass_fraction=0):
         corr = normalize(corr)
     return corr
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def make_square_shape(cylproj):
     nz, na = cylproj.shape
     if nz<na:
@@ -1044,7 +1045,7 @@ def make_square_shape(cylproj):
         ret = cylproj
     return ret
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def cylindrical_projection(map3d, da=1, dz=1, dr=1, rmin=0, rmax=-1, interpolation_order=1):
     # da: degree
     # dr/dz/rmin/rmax: pixel
@@ -1071,7 +1072,7 @@ def cylindrical_projection(map3d, da=1, dz=1, dr=1, rmin=0, rmax=-1, interpolati
 
     return cylindrical_proj
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def minimal_grids(map3d, max_map_dim=300):
     nz, ny, nx = map3d.shape
     n_min_xy = min([ny, nx])
@@ -1080,7 +1081,7 @@ def minimal_grids(map3d, max_map_dim=300):
     ret = map3d[nz//2-n_min_xy//2:nz//2+n_min_xy//2:bin, ny//2-n_min_xy//2:ny//2+n_min_xy//2:bin, nx//2-n_min_z//2:nx//2+n_min_z//2:bin]
     return ret, bin
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def auto_masking(map3d):
     required_packages = "skimage:scikit_image".split()
     import_with_auto_install(required_packages)
@@ -1099,7 +1100,7 @@ def auto_masking(map3d):
         masked = data
     return masked
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def estimate_radial_range(radprofile, thresh_ratio=0.1):
     background = np.mean(radprofile[-3:])
     thresh = (radprofile.max() - background) * thresh_ratio + background
@@ -1108,7 +1109,7 @@ def estimate_radial_range(radprofile, thresh_ratio=0.1):
     rmax_auto = np.max(indices)
     return float(rmin_auto), float(rmax_auto)
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def compute_radial_profile(data):
     proj = data.mean(axis=0)
     ny, nx = proj.shape
@@ -1129,7 +1130,7 @@ def compute_radial_profile(data):
     rad_profile = polar.mean(axis=0)
     return rad_profile
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def transform_map(data, shift_x=0, shift_y=0, shift_z=0, angle_x=0, angle_y=0):
     if not (shift_x or shift_y or angle_x or angle_y):
         return data
@@ -1145,7 +1146,7 @@ def transform_map(data, shift_x=0, shift_y=0, shift_z=0, angle_x=0, angle_y=0):
     ret = affine_transform(data, matrix=m, offset=offset, mode='nearest')
     return ret
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def auto_vertical_center(image, max_angle=15):
     image_work = 1.0 * image
 
@@ -1206,7 +1207,7 @@ def auto_vertical_center(image, max_angle=15):
     dx = res.x + (0.0 if n%2 else 0.5)
     return angle, dx
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def rotate_shift_image(data, angle=0, pre_shift=(0, 0), post_shift=(0, 0), rotation_center=None, order=1):
     # pre_shift/rotation_center/post_shift: [y, x]
     if angle==0 and pre_shift==[0,0] and post_shift==[0,0]: return data*1.0
@@ -1226,7 +1227,7 @@ def rotate_shift_image(data, angle=0, pre_shift=(0, 0), post_shift=(0, 0), rotat
     ret = affine_transform(data, matrix=m, offset=offset, order=order, mode='constant')
     return ret
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def normalize(data, percentile=(0, 100)):
     p0, p1 = percentile
     vmin, vmax = sorted(np.percentile(data, (p0, p1)))
@@ -1251,7 +1252,7 @@ def extract_emd_id(text):
         emd_id = None
     return emd_id
 
-@st.experimental_singleton(show_spinner=False)
+st.cache_resource(show_spinner=False)
 def get_emdb_ids():
     try:
         import_with_auto_install(["pandas"])
@@ -1267,7 +1268,7 @@ def get_emdb_ids():
         methods = {}
     return emdb_ids_all, emdb_ids_helical, methods
 
-@st.experimental_memo(persist='disk', max_entries=1, ttl=60*60, show_spinner=False)
+@st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def get_emdb_parameters(emd_id):
     try:
         emd_id2 = ''.join([s for s in str(emd_id) if s.isdigit()])
@@ -1325,13 +1326,13 @@ def get_emdb_map_url(emdid):
     url = f"{server}/emdb/structures/EMD-{emdid_number}/map/emd_{emdid_number}.map.gz"
     return url
 
-@st.experimental_singleton(show_spinner=False, suppress_st_warning=True)
+@st.cache_resource(show_spinner=False)
 def get_emdb_map(emdid):
     url = get_emdb_map_url(emdid)
     data = get_3d_map_from_url(url)
     return data
 
-@st.experimental_singleton(show_spinner=False, suppress_st_warning=True)
+@st.cache_resource(show_spinner=False)
 def get_3d_map_from_url(url):
     url_final = get_direct_url(url)    # convert cloud drive indirect url to direct url
     ds = np.DataSource(None)
@@ -1440,7 +1441,7 @@ def qr_code(url=None, size = 8):
     data = np.array(img.convert("RGBA"))
     return data
 
-@st.experimental_singleton(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def setup_anonymous_usage_tracking():
     try:
         import pathlib, stat

@@ -1,11 +1,11 @@
-streamlit==1.15.2
-numpy==1.23.5
+streamlit==1.20.0
+numpy==1.24.2
 scipy==1.9.3
 scikit_image==0.19.3
 pandas==1.5.2
 bokeh==2.4.3
 mrcfile==1.4.3
-trackpy==0.5.0
+trackpy==0.6.1
 xmltodict==0.13.0
 uptime==3.0.1
 psutil==5.9.4
