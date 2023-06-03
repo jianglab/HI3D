@@ -6,6 +6,7 @@ pandas==1.5.2
 bokeh==2.4.3
 mrcfile==1.4.3
 trackpy==0.6.1
+kneebow==1.0.1
 xmltodict==0.13.0
 uptime==3.0.1
 psutil==5.9.4

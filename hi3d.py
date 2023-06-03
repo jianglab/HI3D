@@ -35,7 +35,7 @@ def import_with_auto_install(packages, scope=locals()):
             import subprocess
             subprocess.call(f'pip install {package_pip_name}', shell=True)
             scope[package_import_name] =  __import__(package_import_name)
-required_packages = "streamlit numpy scipy bokeh".split()
+required_packages = "streamlit numpy scipy bokeh trackpy kneebow".split()
 import_with_auto_install(required_packages)
 
 import streamlit as st
@@ -447,10 +447,14 @@ def main():
         acf = auto_correlation(cylproj_square, sqrt=show_scf, high_pass_fraction=1./cylproj_square.shape[0])
         del cylproj_square
 
-        peaks, _ = find_peaks(acf, da=da, dz=dz, peak_width=peak_width, peak_height=peak_height, minmass=1.0)
+        peaks, masses = find_peaks(acf, da=da, dz=dz, peak_width=peak_width, peak_height=peak_height, minmass=1.0)
         if peaks is not None:
             npeaks_all = len(peaks)
-            npeaks = int(npeaks_empty.number_input('# peaks to use', value=npeaks_all, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)", key="npeaks"))
+            from kneebow.rotor import Rotor 
+            rotor = Rotor()
+            rotor.fit_rotate( np.vstack((np.arange(len(masses)), masses)).T )
+            npeaks_guess = min(npeaks_all, max(3, rotor.get_elbow_index()))
+            npeaks = int(npeaks_empty.number_input('# peaks to use', value=npeaks_guess, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)", key="npeaks"))
 
         show_arrow_empty = st.empty()
         server_info_empty.markdown(server_info.format(mem_used=mem_used()))
@@ -964,7 +968,6 @@ def getGenericLattice(peaks):
 
 @st.cache_data(persist='disk', max_entries=1, show_spinner=False)
 def find_peaks(acf, da, dz, peak_width=9.0, peak_height=9.0, minmass=1.0, max_peaks=71):
-    import_with_auto_install(["trackpy"])
     from trackpy import locate, refine_com
     # diameter: fraction of the maximal dimension of the image (acf)
     diameter_height = int(peak_height/dz+0.5)//2*2+1
@@ -1191,7 +1194,7 @@ def auto_vertical_center(image, max_angle=15):
     y = np.sum(image_work, axis=0)
     y -= y.min()
     n = len(y)
-    from scipy.ndimage.measurements import center_of_mass
+    from scipy.ndimage import center_of_mass
     cx = int(round(center_of_mass(y)[0]))
     max_shift = abs((cx-n//2)*2)+3
 
