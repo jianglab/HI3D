@@ -109,7 +109,7 @@ def main():
                     st.warning(f"The uploaded file {fileobj.name} ({nx}x{ny}x{nz}) is not a 3D map")
                     data = None
         elif input_mode == 1: # "url":
-            url_default = "https://ftp.wwpdb.org/pub/emdb/structures/EMD-10499/map/emd_10499.map.gz"
+            url_default = get_emdb_map_url("emd-10499")
             help = "An online url (http:// or ftp://) or a local file path (/path/to/your/structure.mrc)"
             if max_map_size>0: help += f". {warning_map_size}"
             url = st.text_input(label="Input the url of a 3D map:", value=url_default, help=help, key="url")
@@ -1323,8 +1323,8 @@ def is_amyloid(params, cutoff=6):
 
 def get_emdb_map_url(emdid):
     emdid_number = emdid.lower().split("emd-")[-1]
-    server = "https://ftp.wwpdb.org/pub"    # Rutgers University, USA
-    #server = "https://ftp.ebi.ac.uk/pub/databases" # European Bioinformatics Institute, England
+    #server = "https://files.wwpdb.org/pub"    # Rutgers University, USA
+    server = "https://ftp.ebi.ac.uk/pub/databases" # European Bioinformatics Institute, England
     #server = "http://ftp.pdbj.org/pub" # Osaka University, Japan
     url = f"{server}/emdb/structures/EMD-{emdid_number}/map/emd_{emdid_number}.map.gz"
     return url
@@ -1430,7 +1430,7 @@ def qr_code(url=None, size = 8):
         _, host = is_hosted(return_host=True)
         if len(host)<1: return None
         if host == "streamlit":
-            url = "https://share.streamlit.io/wjiang/hi3d/main/"
+            url = "https://helical-indexing-hi3d.streamlit.app/"
         elif host == "heroku":
             url = "https://helical-indexing-hi3d.herokuapp.com/"
         else:
