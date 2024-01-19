@@ -1,7 +1,7 @@
 """ 
 MIT License
 
-Copyright (c) 2020-2023 Wen Jiang
+Copyright (c) 2020-2024 Wen Jiang
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -452,7 +452,7 @@ def main():
             npeaks_all = len(peaks)
             from kneebow.rotor import Rotor 
             rotor = Rotor()
-            rotor.fit_rotate( np.vstack((np.arange(len(masses)-3), masses[3:])).T )
+            rotor.fit_rotate( np.vstack((np.arange(len(masses)-3), masses.iloc[3:])).T )
             npeaks_guess = min(npeaks_all, rotor.get_elbow_index()+3)
             npeaks = int(npeaks_empty.number_input('# peaks to use', value=npeaks_guess, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)", key="npeaks"))
 
@@ -503,6 +503,7 @@ def main():
         twist_empty = st.empty()
         rise_empty = st.empty()
         csym_empty = st.empty()
+        button_refine_twist_rise = st.button("Refine twist/rise")
         server_info_empty.markdown(server_info.format(mem_used=mem_used()))
 
     with col2:
@@ -535,9 +536,17 @@ def main():
             msg+= msg_hint
             msg_empty.warning(msg)
 
-        twist = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function", key="twist")
-        rise = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=float(round(rise_auto,2)), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function", key="rise")
+        twist_manual = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function")
+        rise_manual = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=float(round(rise_auto,2)), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function")
         csym = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=int(csym_auto), step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function", key="csym"))
+        
+        if button_refine_twist_rise:
+            twist, rise = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_manual, rise=rise_manual, cn=csym)
+        else:
+            twist, rise = twist_manual, rise_manual
+        st.session_state.twist = twist
+        st.session_state.rise = rise
+
         fig_indexing.title.text = f"twist={round(twist,2):g}° (pitch={round(360/abs(twist)*rise, 2):g}Å) rise={round(rise,2):g}Å  csym=c{int(csym):d}"
         fig_indexing.title.align = "center"
         fig_indexing.title.text_font_size = "24px"
@@ -571,7 +580,7 @@ def main():
                 qr_image = qr_code()
                 st.image(qr_image)
     else:
-        st.experimental_set_query_params()
+        st.query_params.clear()
 
     with col2:
         st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to [HI3D@GitHub](https://github.com/jianglab/hi3d/issues)*")
@@ -1398,10 +1407,10 @@ def set_query_parameters():
             d[attr] = f'{float(v):g}'
         else:
             d[attr] = v
-    st.experimental_set_query_params(**d)
+    st.query_params.update(d)
 
 def parse_query_parameters():
-    query_params = st.experimental_get_query_params()
+    query_params = st.query_params
     for attr in query_params:
         if attr in int_types:
             st.session_state[attr] = int(query_params[attr][0])
@@ -1436,7 +1445,7 @@ def qr_code(url=None, size = 8):
         else:
             url = f"http://{host}:8501/"
         import urllib
-        params = st.experimental_get_query_params()
+        params = st.query_params
         d = {k:params[k][0] for k in params}
         url += "?" + urllib.parse.urlencode(d)
     if not url: return None
