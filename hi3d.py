@@ -388,8 +388,9 @@ def main():
         dz = st.number_input('Axial step size (Å)', value=dz_auto, min_value=0.1, max_value=10., step=0.1, format="%g", help="Set the axial step size for the computation of the cylindric projection. Use a smaller step size (such as 0.2 Å) for a helical structure with small rise (such as a protein fibril with rise ~2.3-2.4 Å or ~4.7-4.8 Å)", key="dz")
         peak_width = st.number_input('Peak width (°)', value=max(1.0, da*9.0), min_value=0.1, max_value=60.0, step=1.0, format="%g", help="Set the expected peak width (°) in the auto-correlation image", key="peak_width")
         peak_height = st.number_input('Peak height (Å)', value=max(1.0, dz*9.0), min_value=0.1, max_value=30.0, step=1.0, format="%g", help="Set the expected peak height (Å) in the auto-correlation image", key="peak_height")
-
         npeaks_empty = st.empty()
+        acf_2rounds = st.checkbox(label="ACF 2x", value=False, help="Compute ACF of ACF", key="acf_2rounds")
+        show_scf = st.checkbox(label="SCF", value=False, help="Use the self-correlation function (SCF) variant of ACF (e.g. |F|->sqrt(|F|)", key="show_scf")
         
         #data = auto_masking(data)
         #data = minimal_grids(data)
@@ -439,12 +440,12 @@ def main():
         cylproj_square = make_square_shape(cylproj_work)
         del cylproj_work
         show_acf = st.checkbox(label="ACF", value=True, help="Display the auto-correlation function (ACF)", key="show_acf")
-        show_scf = False
         if show_acf:
-            show_scf = st.checkbox(label="SCF", value=False, help="Use the self-correlation function (SCF) variant of ACF (e.g. |F|->sqrt(|F|)", key="show_scf")
             show_peaks_empty = st.empty()
 
         acf = auto_correlation(cylproj_square, sqrt=show_scf, high_pass_fraction=1./cylproj_square.shape[0])
+        if acf_2rounds:
+            acf = auto_correlation(acf, sqrt=show_scf, high_pass_fraction=1./cylproj_square.shape[0])
         del cylproj_square
 
         peaks, masses = find_peaks(acf, da=da, dz=dz, peak_width=peak_width, peak_height=peak_height, minmass=1.0)
@@ -457,6 +458,7 @@ def main():
             npeaks = int(npeaks_empty.number_input('# peaks to use', value=npeaks_guess, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)", key="npeaks"))
 
         show_arrow_empty = st.empty()
+        show_lattice_empty = st.empty()
         server_info_empty.markdown(server_info.format(mem_used=mem_used()))
         
     with col4:
@@ -516,7 +518,7 @@ def main():
         fig_indexing = generate_bokeh_figure(image=acf, dx=da, dy=dz, title="", title_location="above", plot_width=None, plot_height=None, x_axis_label=x_axis_label, y_axis_label=y_axis_label, tooltips=tooltips, show_axis=True, show_toolbar=True, crosshair_color="white", aspect_ratio=w/h)
 
         # horizontal line along the equator
-        from bokeh.models import LinearColorMapper, Arrow, VeeHead, Line
+        from bokeh.models import Arrow, VeeHead
         fig_indexing.line([-w//2*da, (w//2-1)*da], [0, 0], line_width=2, line_color="yellow", line_dash="dashed")
         
         trc1, trc2 = fitHelicalLattice(peaks[:npeaks], acf, da=da, dz=dz)
@@ -560,6 +562,24 @@ def main():
         show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True, help="Show an arrow in the central panel from the center to the first lattice point corresponding to the helical twist/rise", key="show_arrow")
         if show_arrow:
             fig_indexing.add_layout(Arrow(x_start=0, y_start=0, x_end=twist, y_end=rise, line_color="yellow", line_width=4, end=VeeHead(line_color="yellow", fill_color="yellow", line_width=2)))
+
+        show_lattice = show_lattice_empty.checkbox(label="Lattice", value=True, help="Show the helical twist/rise lattice in the central panel", key="show_lattice")
+        if show_lattice:
+            from bokeh.models import ColumnDataSource, Scatter
+            from bokeh.palettes import Category10
+            colors_avail = Category10[max(3, min(10, csym))]
+            colors = [colors_avail[si % len(colors_avail)] for si in range(csym)]
+            n = int(h/2*dz/rise)+1
+            n = np.arange(-n, n+1)
+            x = np.fmod(twist * n + np.max(n)*360, 360)
+            x[x>180] -= 360
+            y = rise * n
+            for si in range(csym):
+                xsym = np.fmod(x + 360/csym * si, 360)
+                xsym[xsym>180] -= 360
+                source = ColumnDataSource(dict(x=xsym, y=y))
+                scatter = Scatter(x='x', y='y', marker='circle', size=10, line_width=3, line_color=colors[si], fill_color=None)
+                fig_indexing.add_glyph(source, scatter)
 
         from bokeh.models import CustomJS
         from bokeh.events import MouseEnter
