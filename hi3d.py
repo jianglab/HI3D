@@ -1433,11 +1433,11 @@ def parse_query_parameters():
     query_params = st.query_params
     for attr in query_params:
         if attr in int_types:
-            st.session_state[attr] = int(query_params[attr][0])
+            st.session_state[attr] = int(query_params[attr])
         elif attr in float_types:
-            st.session_state[attr] = float(query_params[attr][0])
+            st.session_state[attr] = float(query_params[attr])
         else:
-            st.session_state[attr] = query_params[attr][0]
+            st.session_state[attr] = query_params[attr]
 
 def dict_recursive_search(d, key, default=None):
     stack = [iter(d.items())]
