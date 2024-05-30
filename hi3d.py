@@ -115,8 +115,7 @@ def main():
             url = st.text_input(label="Input the url of a 3D map:", value=url_default, help=help, key="url")
             emd_id = extract_emd_id(url)
             is_emd = emd_id is not None and emd_id in emdb_ids_helical
-            with st.spinner(f'Downloading {url.strip()}'):
-                data, apix = get_3d_map_from_url(url.strip())
+            data, apix = get_3d_map_from_url(url.strip())
             nz, ny, nx = data.shape
             if nz<32:
                 st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
@@ -171,8 +170,7 @@ def main():
             else:
                 msg +=  "  \n*helical params not available*"
             st.markdown(msg)
-            with st.spinner(f'Downloading EMD-{emd_id} from {get_emdb_map_url(emd_id)}'):
-                data, apix = get_emdb_map(emd_id)
+            data, apix = get_emdb_map(emd_id)
             if data is None:
                 st.warning(f"Failed to download [EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})")
                 return
@@ -250,10 +248,12 @@ def main():
                 rotx, roty, shiftx, shifty, shiftz = 0., 0., 0., 0., 0.
 
         if section_axis == 3:
-            image = np.squeeze(np.take(data, indices=[section_index], axis=2))
+            image = np.zeros((nz, max(ny, nx)), dtype=data.dtype)
+            image_x = np.squeeze(np.take(data, indices=[section_index], axis=2))
             image_y = np.squeeze(np.take(data, indices=[section_index], axis=1))
-            image[:, ny//2:]= image_y[:, nx//2:]
-            image[:, ny//2-1] = 0
+            image[:, :ny//2] = image_x[:, :ny//2]
+            image[:, -nx//2:] = image_y[:, nx//2:]
+            image[:, ny//2-1] = np.max(image)
         else:
             image = np.squeeze(np.take(data, indices=[section_index], axis=section_axis))
 
@@ -1289,7 +1289,7 @@ def get_emdb_ids():
     try:
         import_with_auto_install(["pandas"])
         import pandas as pd
-        entries_all = pd.read_csv('https://www.ebi.ac.uk/emdb/api/search/current_status:"REL"?wt=csv&download=true&fl=emdb_id,structure_determination_method,resolution')
+        entries_all = pd.read_csv('https://www.ebi.ac.uk/emdb/api/search/current_status:"REL"?rows=1000000&wt=csv&download=true&fl=emdb_id,structure_determination_method,resolution')
         methods = list(entries_all["structure_determination_method"])
         entries_helical = entries_all[entries_all["structure_determination_method"]=="helical"]
         emdb_ids_all     = list(entries_all.iloc[:,0].str.split('-', expand=True).iloc[:, 1].values)
@@ -1367,12 +1367,11 @@ def get_emdb_map(emdid):
 @st.cache_resource(show_spinner=False)
 def get_3d_map_from_url(url):
     url_final = get_direct_url(url)    # convert cloud drive indirect url to direct url
-    ds = np.DataSource(None)
-    if not ds.exists(url_final):
+    fileobj = download_file_from_url(url_final)
+    if fileobj is None:
         st.error(f"ERROR: {url} could not be downloaded. If this url points to a cloud drive file, make sure the link is a direct download link instead of a link for preview")
         st.stop()
-    with ds.open(url) as fp:
-        data = get_3d_map_from_file(fp.name)
+    data = get_3d_map_from_file(fileobj.name)
     return data
 
 def get_3d_map_from_file(filename):
@@ -1384,11 +1383,54 @@ def get_3d_map_from_file(filename):
     else:
         filename_final = filename
     import mrcfile
-    with mrcfile.mmap(filename_final) as mrc:
+    with mrcfile.open(filename_final,mode="r+") as mrc:
+        change_mrc_axes_order(mrc, new_axes=["x", "y", "z"])
         apix = mrc.voxel_size.x.item()
         is3d = mrc.is_volume() or mrc.is_volume_stack()
         data = mrc.data
     return data, apix
+
+def change_mrc_axes_order(mrc, new_axes=["x", "y", "z"]):
+    map_axes = {"x":0, "y":1, "z":2}
+    map_axes_reverse = {0:"x", 1:"y", 2:"z"}
+    current_axes_int = [ mrc.header.mapc-1, mrc.header.mapr-1, mrc.header.maps-1 ]
+    new_axes_int = [ map_axes[a] for a in new_axes ]
+    if current_axes_int == new_axes_int: return
+    st.warning(f"The map axes order was {','.join([map_axes_reverse[a] for a in current_axes_int])}. It has now been changed to x,y,z")
+    mrc.set_data( np.moveaxis(mrc.data, current_axes_int, new_axes_int) )
+    mrc.header.mapc = map_axes[new_axes[0]]
+    mrc.header.mapr = map_axes[new_axes[1]]
+    mrc.header.maps = map_axes[new_axes[2]]
+    return
+
+def download_file_from_url(url):
+    import tempfile
+    import requests
+    try:
+        filesize = get_file_size(url)
+        local_filename = url.split('/')[-1]
+        suffix = '.' + local_filename
+        fileobj = tempfile.NamedTemporaryFile(suffix=suffix)
+        msg = f'Downloading {url}'
+        if filesize is not None:
+            msg += f" ({filesize/2**20:.1f} MB)"
+        with st.spinner(msg):
+            with requests.get(url) as r:
+                r.raise_for_status()  # Check for request success
+                fileobj.write(r.content)
+        return fileobj
+    except Exception as e:
+        return None
+
+@st.cache_data(show_spinner=False)
+def get_file_size(url):
+    import requests
+    response = requests.head(url)
+    if 'Content-Length' in response.headers:
+        file_size = int(response.headers['Content-Length'])
+        return file_size
+    else:
+        return None
 
 def get_direct_url(url):
     import re
