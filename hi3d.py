@@ -103,7 +103,7 @@ def main():
             if fileobj is not None:
                 emd_id = extract_emd_id(fileobj.name)
                 is_emd = emd_id is not None and emd_id in emdb_ids_helical
-                data, apix = get_3d_map_from_uploaded_file(fileobj)
+                data, map_crs, apix = get_3d_map_from_uploaded_file(fileobj)
                 nz, ny, nx = data.shape
                 if nz<32:
                     st.warning(f"The uploaded file {fileobj.name} ({nx}x{ny}x{nz}) is not a 3D map")
@@ -115,7 +115,7 @@ def main():
             url = st.text_input(label="Input the url of a 3D map:", value=url_default, help=help, key="url")
             emd_id = extract_emd_id(url)
             is_emd = emd_id is not None and emd_id in emdb_ids_helical
-            data, apix = get_3d_map_from_url(url.strip())
+            data, map_crs, apix = get_3d_map_from_url(url.strip())
             nz, ny, nx = data.shape
             if nz<32:
                 st.warning(f"{url} points to a file ({nx}x{ny}x{nz}) that is not a 3D map")
@@ -170,7 +170,7 @@ def main():
             else:
                 msg +=  "  \n*helical params not available*"
             st.markdown(msg)
-            data, apix = get_emdb_map(emd_id)
+            data, map_crs, apix = get_emdb_map(emd_id)
             if data is None:
                 st.warning(f"Failed to download [EMD-{emd_id}](https://www.ebi.ac.uk/emdb/entry/EMD-{emd_id})")
                 return
@@ -178,6 +178,21 @@ def main():
 
         if data is None:
             return
+        
+        if map_crs != [1, 2, 3]:
+            map_crs_to_xyz = {1:'x', 2:'y', 3:'z'}
+            xyz = ','.join([map_crs_to_xyz[int(i)] for i in map_crs])
+            label = f"Change map axes order from {xyz} to:"
+            st.text_input(label=label, value="x,y,z", help=f"Cryo-EM field assumes that the map axes are in the order of x,y,z (e.g. MRC/CCP4 header fields mapc=1, mapr=2, maps=3). However, you map header has a different order {xyz} (mapc={map_crs[0]}, mapr={map_crs[1]}, maps={map_crs[2]})", key="target_map_axes_order")
+            try:
+                target_map_axes_order = st.session_state.target_map_axes_order.lower().split(",")
+                assert len(target_map_axes_order) == 3
+                xyz_to_map_crs = {'x':1, 'y':2, 'z':3}
+                target_map_crs = [xyz_to_map_crs[a] for a in target_map_axes_order]
+            except:
+                st.warning(f"Incorrect value {st.session_state.target_map_axes_order}. I will use the default value x,y,z")
+                target_map_crs = [1, 2, 3]
+            data = change_mrc_map_crs_order(data=data, current_order=map_crs, target_order=target_map_crs)
 
         nz, ny, nx = data.shape
         st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
@@ -1383,25 +1398,21 @@ def get_3d_map_from_file(filename):
     else:
         filename_final = filename
     import mrcfile
-    with mrcfile.open(filename_final,mode="r+") as mrc:
-        change_mrc_axes_order(mrc, new_axes=["x", "y", "z"])
+    with mrcfile.open(filename_final,mode="r") as mrc:
+        data = mrc.data
+        map_crs = [int(mrc.header.mapc), int(mrc.header.mapr), int(mrc.header.maps)]
         apix = mrc.voxel_size.x.item()
         is3d = mrc.is_volume() or mrc.is_volume_stack()
-        data = mrc.data
-    return data, apix
+    return data, map_crs, apix
 
-def change_mrc_axes_order(mrc, new_axes=["x", "y", "z"]):
-    map_axes = {"x":0, "y":1, "z":2}
-    map_axes_reverse = {0:"x", 1:"y", 2:"z"}
-    current_axes_int = [ mrc.header.mapc-1, mrc.header.mapr-1, mrc.header.maps-1 ]
-    new_axes_int = [ map_axes[a] for a in new_axes ]
-    if current_axes_int == new_axes_int: return
-    st.warning(f"The map axes order was {','.join([map_axes_reverse[a] for a in current_axes_int])}. It has now been changed to x,y,z")
-    mrc.set_data( np.moveaxis(mrc.data, current_axes_int, new_axes_int) )
-    mrc.header.mapc = map_axes[new_axes[0]]
-    mrc.header.mapr = map_axes[new_axes[1]]
-    mrc.header.maps = map_axes[new_axes[2]]
-    return
+def change_mrc_map_crs_order(data, current_order, target_order=[1, 2, 3]):
+    if current_order == target_order: return data
+    map_crs_to_np_axes = {1:2, 2:1, 3:0}
+    current_np_axes_order = [map_crs_to_np_axes[int(i)] for i in current_order]
+    target_np_axes_order = [map_crs_to_np_axes[int(i)] for i in target_order]
+    import numpy as np
+    ret = np.moveaxis(data, current_np_axes_order, target_np_axes_order)
+    return ret
 
 def download_file_from_url(url):
     import tempfile
