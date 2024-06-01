@@ -182,8 +182,8 @@ def main():
         if map_crs != [1, 2, 3]:
             map_crs_to_xyz = {1:'x', 2:'y', 3:'z'}
             xyz = ','.join([map_crs_to_xyz[int(i)] for i in map_crs])
-            label = f"Change map axes order from {xyz} to:"
-            st.text_input(label=label, value="x,y,z", help=f"Cryo-EM field assumes that the map axes are in the order of x,y,z (e.g. MRC/CCP4 header fields mapc=1, mapr=2, maps=3). However, you map header has a different order {xyz} (mapc={map_crs[0]}, mapr={map_crs[1]}, maps={map_crs[2]})", key="target_map_axes_order")
+            label = f":red[Change map axes order from {xyz} to:]"
+            st.text_input(label=label, value="x,y,z", max_chars=5, help=f"Cryo-EM field assumes that the map axes are in the order of x,y,z (e.g. MRC/CCP4 header fields mapc=1, mapr=2, maps=3). However, you map header has a different order {xyz} (mapc={map_crs[0]}, mapr={map_crs[1]}, maps={map_crs[2]})", key="target_map_axes_order")
             try:
                 target_map_axes_order = st.session_state.target_map_axes_order.lower().split(",")
                 assert len(target_map_axes_order) == 3
@@ -1467,7 +1467,7 @@ def get_direct_url(url):
 
 int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_scf', 'show_arrow', 'show_cylproj', 'show_peaks', 'show_qr']
 float_types = ['ang_max', 'ang_min', 'da', 'dz', 'peak_width', 'peak_height', 'rise', 'rmax', 'rmin', 'shiftx', 'shifty', 'shiftz', 'rotx', 'roty', 'thresh', 'twist', 'z_max', 'z_min']
-default_values = {'csym':1, 'do_threshold':0, 'do_transform':0, 'input_mode':2, 'npeaks':71, 'random_embid':1, 'section_axis':2, 'share_url':0, 'show_acf':1, 'show_scf':0, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'show_qr':0, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'peak_width':9.0, 'peak_height':9.0, 'rmin':0, 'shiftx':0, 'shifty':0, 'shiftz':0, 'rotx':0, 'roty':0, 'thresh':0, 'z_max':-180., 'z_min':180.}
+default_values = {'csym':1, 'do_threshold':0, 'do_transform':0, 'input_mode':2, 'npeaks':71, 'random_embid':1, 'section_axis':2, 'share_url':0, 'show_acf':1, 'show_scf':0, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'show_qr':0, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'peak_width':9.0, 'peak_height':9.0, 'rmin':0, 'shiftx':0, 'shifty':0, 'shiftz':0, 'rotx':0, 'roty':0, 'target_map_axes_order':'x,y,z', 'thresh':0, 'z_max':-180., 'z_min':180.}
 def set_query_parameters():
     d = {}
     attrs = sorted(st.session_state.keys())
