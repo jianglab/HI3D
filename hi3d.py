@@ -1291,7 +1291,7 @@ def get_3d_map_from_uploaded_file(fileobj):
 
 def extract_emd_id(text):
     import re
-    pattern = '.*emd_([0-9]*)\.map.*'
+    pattern = r'.*emd_([0-9]+)\.map.*'
     match = re.search(pattern, text, re.IGNORECASE)
     if match:
         emd_id = match.group(1)
@@ -1382,11 +1382,15 @@ def get_emdb_map(emdid):
 @st.cache_resource(show_spinner=False)
 def get_3d_map_from_url(url):
     url_final = get_direct_url(url)    # convert cloud drive indirect url to direct url
-    fileobj = download_file_from_url(url_final)
-    if fileobj is None:
-        st.error(f"ERROR: {url} could not be downloaded. If this url points to a cloud drive file, make sure the link is a direct download link instead of a link for preview")
-        st.stop()
-    data = get_3d_map_from_file(fileobj.name)
+    with download_file_from_url(url_final) as fileobj:
+        if fileobj is None:
+            st.error(f"ERROR: {url} could not be downloaded. If this url points to a cloud drive file, make sure the link is a direct download link instead of a link for preview")
+            st.stop()
+        data = get_3d_map_from_file(fileobj.name)
+    import os
+    file_to_remove = fileobj.name.removesuffix(".gz")
+    if os.path.exists(file_to_remove):
+        os.unlink(file_to_remove)
     return data
 
 def get_3d_map_from_file(filename):
