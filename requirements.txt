@@ -7,7 +7,7 @@ psutil==5.9.7
 qrcode==7.4.2
 scikit-image==0.22.0
 scipy==1.11.4
-streamlit==1.30.0
+streamlit==1.38.0
 trackpy==0.6.1
 uptime==3.0.1
 xmltodict==0.13.0
