@@ -57,7 +57,7 @@ def main():
 
     st.title(title)
 
-    st.elements.utils._shown_default_value_warning = True
+    st.elements.lib.policies._shown_default_value_warning = True
 
     if "input_mode" not in st.session_state:  # only run once at the start of the session
         parse_query_parameters()
