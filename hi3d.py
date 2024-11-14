@@ -40,6 +40,7 @@ import_with_auto_install(required_packages)
 
 import streamlit as st
 import numpy as np
+np.bool8 = bool  # fix for bokeh 2.4.3
 from scipy.ndimage import map_coordinates
 import math, random
 import gc
@@ -56,8 +57,6 @@ def main():
         st.error(f"This app hosted on Heroku will be unavailable starting November 28, 2022 [when Heroku discontinues free hosting service](https://blog.heroku.com/next-chapter). Please switch to [the same app hosted elsewhere](https://helical-indexing-hi3d.streamlit.app)")
 
     st.title(title)
-
-    st.elements.lib.policies._shown_default_value_warning = True
 
     if "input_mode" not in st.session_state:  # only run once at the start of the session
         parse_query_parameters()
