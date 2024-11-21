@@ -465,10 +465,13 @@ def main():
         peaks, masses = find_peaks(acf, da=da, dz=dz, peak_width=peak_width, peak_height=peak_height, minmass=1.0)
         if peaks is not None:
             npeaks_all = len(peaks)
-            from kneebow.rotor import Rotor 
-            rotor = Rotor()
-            rotor.fit_rotate( np.vstack((np.arange(len(masses)-3), masses.iloc[3:])).T )
-            npeaks_guess = min(npeaks_all, rotor.get_elbow_index()+3)
+            try:
+                from kneebow.rotor import Rotor 
+                rotor = Rotor()
+                rotor.fit_rotate( np.vstack((np.arange(len(masses)-3), masses.iloc[3:])).T )
+                npeaks_guess = min(npeaks_all, rotor.get_elbow_index()+3)
+            except:
+                npeaks_guess = npeaks_all
             npeaks = int(npeaks_empty.number_input('# peaks to use', value=npeaks_guess, min_value=3, max_value=npeaks_all, step=2, help=f"The {npeaks_all} peaks detected in the auto-correlation function are sorted by peak quality. This input allows you to use only the best peaks instead of all {npeaks_all} peaks to determine the lattice parameters (i.e. helical twist, rise, and csym)", key="npeaks"))
 
         show_arrow_empty = st.empty()
