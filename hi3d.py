@@ -1,7 +1,7 @@
 """ 
 MIT License
 
-Copyright (c) 2020-2024 Wen Jiang
+Copyright (c) 2020-2025 Wen Jiang
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -38,6 +38,7 @@ def import_with_auto_install(packages, scope=locals()):
 required_packages = "streamlit numpy scipy bokeh trackpy kneebow".split()
 import_with_auto_install(required_packages)
 
+from matplotlib.scale import LogTransform
 import streamlit as st
 import numpy as np
 np.bool8 = bool  # fix for bokeh 2.4.3
@@ -158,7 +159,7 @@ def main():
                 nx = params["nx"]
                 map_size = nz*ny*nx*4 / pow(2, 20)
                 if map_size>stop_map_size:
-                    msg_map_too_large = f"As the map size ({map_size:.1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit ({mem_quota():.1f} MB memory cap) of the hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
+                    msg_map_too_large = f"As the map size ({map_size:.1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit ({mem_quota():.1f} MB memory cap) of the hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jianglab.science.psu.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
                     msg_empty.warning(msg_map_too_large)
                     st.stop()
             if params and is_amyloid(params, cutoff=6):
@@ -199,7 +200,7 @@ def main():
         if max_map_size>0:
             map_size = nz*ny*nx*4 / pow(2, 20)
             if map_size>stop_map_size:
-                msg_map_too_large = f"As the map size ({map_size:.1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit ({mem_quota():.1f} MB memory cap) of the hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
+                msg_map_too_large = f"As the map size ({map_size:.1f} MB, {nx}x{ny}x{nz} voxels) is too large for the resource limit ({mem_quota():.1f} MB memory cap) of the hosting service, HI3D will stop analyzing it to avoid crashing the server. Please bin/crop your map so that it is {max_map_size} MB ({max_map_dim}x{max_map_dim}x{max_map_dim} voxels) or less, and then try again. Please check the [HI3D web site](https://jianglab.science.psu.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
                 msg_empty.warning(msg_map_too_large)
                 st.stop()
             elif map_size>max_map_size:
@@ -213,7 +214,7 @@ def main():
                     nz, ny, nx = data.shape
                     st.markdown(f'{nx}x{ny}x{nz} voxels | {round(apix,4):g} Å/voxel')
                 else:
-                    msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or cropping the empty padding space around the structure, and then try again. If the crashing persists, please check the [HI3D web site](https://jiang.bio.purdue.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
+                    msg = f"{warning_map_size}. If this map ({map_size:.1f}>{max_map_size } MB) indeed crashes the server process, please reduce the map size by binning the map or cropping the empty padding space around the structure, and then try again. If the crashing persists, please check the [HI3D web site](https://jianglab.science.psu.edu/hi3d) to learn how to run HI3D on your local computer with larger memory to support large maps"
                     msg_empty.warning(msg)
         
         vmin, vmax = data.min(), data.max()
@@ -579,6 +580,10 @@ def main():
         show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True, help="Show an arrow in the central panel from the center to the first lattice point corresponding to the helical twist/rise", key="show_arrow")
         if show_arrow:
             fig_indexing.add_layout(Arrow(x_start=0, y_start=0, x_end=twist, y_end=rise, line_color="yellow", line_width=4, end=VeeHead(line_color="yellow", fill_color="yellow", line_width=2)))
+            if 'twist2' in st.session_state and 'rise2' in st.session_state:
+                twist2 = float(st.session_state.twist2)
+                rise2 = float(st.session_state.rise2)
+                fig_indexing.add_layout(Arrow(x_start=0, y_start=0, x_end=twist2, y_end=rise2, line_color="red", line_width=4, line_dash="dashed", end=VeeHead(line_color="red", fill_color='red', line_width=2)))
 
         show_lattice = show_lattice_empty.checkbox(label="Lattice", value=True, help="Show the helical twist/rise lattice in the central panel", key="show_lattice")
         if show_lattice:
@@ -620,7 +625,7 @@ def main():
         st.query_params.clear()
 
     with col2:
-        st.markdown("*Developed by the [Jiang Lab@Purdue University](https://jiang.bio.purdue.edu/HI3D). Report problems to [HI3D@GitHub](https://github.com/jianglab/hi3d/issues)*")
+        st.markdown("*Developed by the [Jiang Lab@Penn State University](https://jianglab.science.psu.edu/HI3D). Report problems to [HI3D@GitHub](https://github.com/jianglab/hi3d/issues)*")
         st.markdown("Please cite: *Sun, C., Gonzalez, B., & Jiang, W. (2022). Helical Indexing in Real Space. Scientific Reports, 12(1), 1–11. https://doi.org/10.1038/s41598-022-11382-7*")
 
     server_info_empty.markdown(server_info.format(mem_used=mem_used()))
@@ -1471,9 +1476,9 @@ def get_direct_url(url):
     else:
         return url
 
-int_types = ['csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_scf', 'show_arrow', 'show_cylproj', 'show_peaks', 'show_qr']
-float_types = ['ang_max', 'ang_min', 'da', 'dz', 'peak_width', 'peak_height', 'rise', 'rmax', 'rmin', 'shiftx', 'shifty', 'shiftz', 'rotx', 'roty', 'thresh', 'twist', 'z_max', 'z_min']
-default_values = {'csym':1, 'do_threshold':0, 'do_transform':0, 'input_mode':2, 'npeaks':71, 'random_embid':1, 'section_axis':2, 'share_url':0, 'show_acf':1, 'show_scf':0, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'show_qr':0, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'peak_width':9.0, 'peak_height':9.0, 'rmin':0, 'shiftx':0, 'shifty':0, 'shiftz':0, 'rotx':0, 'roty':0, 'target_map_axes_order':'x,y,z', 'thresh':0, 'z_max':-180., 'z_min':180.}
+int_types = ['acf_2rounds', 'csym', 'do_threshold', 'do_transform', 'input_mode', 'npeaks', 'random_embid', 'section_axis', 'share_url', 'show_acf', 'show_scf', 'show_arrow', 'show_cylproj', 'show_lattice', 'show_peaks', 'show_qr']
+float_types = ['ang_max', 'ang_min', 'da', 'dz', 'peak_width', 'peak_height', 'rise', 'rise2', 'rmax', 'rmin', 'shiftx', 'shifty', 'shiftz', 'rotx', 'roty', 'thresh', 'twist', 'twist2', 'z_max', 'z_min']
+default_values = {'acf_2rounds':0, 'csym':1, 'do_threshold':0, 'LogTransformm':0, 'input_mode':2, 'npeaks':71, 'random_embid':1, 'section_axis':2, 'share_url':0, 'show_acf':1, 'show_scf':0, 'show_arrow':1, 'show_cylproj':1, 'show_peaks':1, 'show_qr':0, 'ang_max':180., 'ang_min':-180., 'da':1.0, 'dz':1.0, 'peak_width':9.0, 'peak_height':9.0, 'rmin':0, 'shiftx':0, 'shifty':0, 'shiftz':0, 'rotx':0, 'roty':0, 'show_lattice':1, 'target_map_axes_order':'x,y,z', 'thresh':0, 'z_max':-180., 'z_min':180.}
 def set_query_parameters():
     d = {}
     attrs = sorted(st.session_state.keys())
