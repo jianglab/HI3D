@@ -539,33 +539,39 @@ def main():
         from bokeh.models import Arrow, VeeHead
         fig_indexing.line([-w//2*da, (w//2-1)*da], [0, 0], line_width=2, line_color="yellow", line_dash="dashed")
         
-        trc1, trc2 = fitHelicalLattice(peaks[:npeaks], acf, da=da, dz=dz)
-        trc_mean = consistent_twist_rise_cn_sets([trc1], [trc2], epsilon=1.0)
-        success = True if trc_mean else False
+        if not ('twist' in st.session_state and 'rise' in st.session_state and 'csym' in st.session_state):
+            trc1, trc2 = fitHelicalLattice(peaks[:npeaks], acf, da=da, dz=dz)
+            trc_mean = consistent_twist_rise_cn_sets([trc1], [trc2], epsilon=1.0)
+            success = True if trc_mean else False
 
-        if success:
-            twist_tmp, rise_tmp, cn = trc_mean[0]
-            twist_auto, rise_auto = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_tmp, rise=rise_tmp, cn=cn)
-            csym_auto = cn
-        else:
-            twist_auto, rise_auto, csym_auto = trc1
-            msg = f"The two automated methods with default parameters have failed to obtain consistent helical parameters using {npeaks} peaks. The two solutions are:  \n"
-            msg+= f"Twist per subunit:&emsp;&emsp;{round(trc1[0],2):>6.2f}&emsp;{round(trc2[0],2):>6.2f} °  \n"
-            msg+= f"Rise &nbsp; per subunit:&emsp;&emsp;{round(trc1[1],2):>6.2f}&emsp;{round(trc2[1]):>6.2f} Å  \n"
-            msg+= f"Csym &emsp;&emsp;&emsp;&emsp;&emsp;:&emsp;&emsp;c{int(trc1[2]):5}&emsp;&emsp;c{int(trc2[2]):5}  \n  \n"
-            msg+= msg_hint
-            msg_empty.warning(msg)
+            if success:
+                twist_tmp, rise_tmp, cn = trc_mean[0]
+                twist_auto, rise_auto = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_tmp, rise=rise_tmp, cn=cn)
+                csym_auto = cn
+            else:
+                twist_auto, rise_auto, csym_auto = trc1
+                msg = f"The two automated methods with default parameters have failed to obtain consistent helical parameters using {npeaks} peaks. The two solutions are:  \n"
+                msg+= f"Twist per subunit:&emsp;&emsp;{round(trc1[0],2):>6.2f}&emsp;{round(trc2[0],2):>6.2f} °  \n"
+                msg+= f"Rise &nbsp; per subunit:&emsp;&emsp;{round(trc1[1],2):>6.2f}&emsp;{round(trc2[1]):>6.2f} Å  \n"
+                msg+= f"Csym &emsp;&emsp;&emsp;&emsp;&emsp;:&emsp;&emsp;c{int(trc1[2]):5}&emsp;&emsp;c{int(trc2[2]):5}  \n  \n"
+                msg+= msg_hint
+                msg_empty.warning(msg)
 
-        twist_manual = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function")
-        rise_manual = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=float(round(rise_auto,2)), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function")
-        csym = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=int(csym_auto), step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function", key="csym"))
-        
-        if button_refine_twist_rise:
-            twist, rise = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_manual, rise=rise_manual, cn=csym)
+            twist_manual = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function")
+            rise_manual = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=float(round(rise_auto,2)), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function")
+            csym = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=int(csym_auto), step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function", key="csym"))
+            
+            if button_refine_twist_rise:
+                twist, rise = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_manual, rise=rise_manual, cn=csym)
+            else:
+                twist, rise = twist_manual, rise_manual
+            st.session_state.twist = twist
+            st.session_state.rise = rise
+            st.session_state.csym = csym
         else:
-            twist, rise = twist_manual, rise_manual
-        st.session_state.twist = twist
-        st.session_state.rise = rise
+            twist = st.session_state.twist
+            rise = st.session_state.rise
+            csym = st.session_state.csym
 
         fig_indexing.title.text = f"twist={round(twist,2):g}° (pitch={round(360/abs(twist)*rise, 2):g}Å) rise={round(rise,2):g}Å  csym=c{int(csym):d}"
         fig_indexing.title.align = "center"
@@ -580,9 +586,10 @@ def main():
         show_arrow = show_arrow_empty.checkbox(label="Arrow", value=True, help="Show an arrow in the central panel from the center to the first lattice point corresponding to the helical twist/rise", key="show_arrow")
         if show_arrow:
             fig_indexing.add_layout(Arrow(x_start=0, y_start=0, x_end=twist, y_end=rise, line_color="yellow", line_width=4, end=VeeHead(line_color="yellow", fill_color="yellow", line_width=2)))
-            if 'twist2' in st.session_state and 'rise2' in st.session_state:
+            if 'twist2' in st.session_state and 'rise2' in st.session_state and "csym2" in st.session_state:
                 twist2 = float(st.session_state.twist2)
                 rise2 = float(st.session_state.rise2)
+                csym2 = int(st.session_state.csym2)
                 fig_indexing.add_layout(Arrow(x_start=0, y_start=0, x_end=twist2, y_end=rise2, line_color="red", line_width=4, line_dash="dashed", end=VeeHead(line_color="red", fill_color='red', line_width=2)))
 
         show_lattice = show_lattice_empty.checkbox(label="Lattice", value=True, help="Show the helical twist/rise lattice in the central panel", key="show_lattice")
