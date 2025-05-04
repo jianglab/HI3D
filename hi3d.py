@@ -523,7 +523,7 @@ def main():
         twist_empty = st.empty()
         rise_empty = st.empty()
         csym_empty = st.empty()
-        button_refine_twist_rise = st.button("Refine twist/rise")
+        button_refine_twist_rise_empty = st.empty()
         server_info_empty.markdown(server_info.format(mem_used=mem_used()))
 
     with col2:
@@ -559,19 +559,20 @@ def main():
 
             twist_manual = twist_empty.number_input(label="Twist (°):", min_value=-180., max_value=180., value=float(round(twist_auto,2)), step=0.01, format="%g", help="Manually set the helical twist instead of automatically detecting it from the lattice in the auto-correlation function")
             rise_manual = rise_empty.number_input(label="Rise (Å):", min_value=0., max_value=h*dz, value=float(round(rise_auto,2)), step=0.01, format="%g", help="Manually set the helical rise instead of automatically detecting it from the lattice in the auto-correlation function")
-            csym = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=int(csym_auto), step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function", key="csym"))
+            csym_manual = int(csym_empty.number_input(label="Csym:", min_value=1, max_value=64, value=int(csym_auto), step=1, format="%d", help="Manually set the cyclic symmetry instead of automatically detecting it from the lattice in the auto-correlation function"))
             
+            button_refine_twist_rise = button_refine_twist_rise_empty.button("Refine twist/rise")
             if button_refine_twist_rise:
-                twist, rise = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_manual, rise=rise_manual, cn=csym)
+                twist, rise = refine_twist_rise(acf_image=(acf, da, dz), twist=twist_manual, rise=rise_manual, cn=csym_manual)
             else:
                 twist, rise = twist_manual, rise_manual
             st.session_state.twist = twist
             st.session_state.rise = rise
-            st.session_state.csym = csym
-        else:
-            twist = st.session_state.twist
-            rise = st.session_state.rise
-            csym = st.session_state.csym
+            st.session_state.csym = csym_manual
+
+        twist = st.session_state.twist
+        rise = st.session_state.rise
+        csym = st.session_state.csym
 
         fig_indexing.title.text = f"twist={round(twist,2):g}° (pitch={round(360/abs(twist)*rise, 2):g}Å) rise={round(rise,2):g}Å  csym=c{int(csym):d}"
         fig_indexing.title.align = "center"
