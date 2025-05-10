@@ -539,7 +539,7 @@ def main():
         from bokeh.models import Arrow, VeeHead
         fig_indexing.line([-w//2*da, (w//2-1)*da], [0, 0], line_width=2, line_color="yellow", line_dash="dashed")
         
-        if not ('twist' in st.session_state and 'rise' in st.session_state and 'csym' in st.session_state):
+        if st.session_state["inital_twist_rise_cysm_is_set"] is False:
             trc1, trc2 = fitHelicalLattice(peaks[:npeaks], acf, da=da, dz=dz)
             trc_mean = consistent_twist_rise_cn_sets([trc1], [trc2], epsilon=1.0)
             success = True if trc_mean else False
@@ -1510,6 +1510,11 @@ def parse_query_parameters():
             st.session_state[attr] = float(query_params[attr])
         else:
             st.session_state[attr] = query_params[attr]
+    
+    if 'twist' in st.session_state and 'rise' in st.session_state and "csym" in st.session_state:
+        st.session_state["inital_twist_rise_cysm_is_set"] = True
+    else:
+        st.session_state["inital_twist_rise_cysm_is_set"] = False
 
 def dict_recursive_search(d, key, default=None):
     stack = [iter(d.items())]
