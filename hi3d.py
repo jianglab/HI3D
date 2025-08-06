@@ -35,13 +35,13 @@ def import_with_auto_install(packages, scope=locals()):
             import subprocess
             subprocess.call(f'pip install {package_pip_name}', shell=True)
             scope[package_import_name] =  __import__(package_import_name)
-required_packages = "streamlit numpy scipy bokeh trackpy kneebow".split()
+required_packages = "streamlit numpy scipy bokeh streamlit_bokeh trackpy kneebow".split()
 import_with_auto_install(required_packages)
 
 from matplotlib.scale import LogTransform
 import streamlit as st
+from streamlit_bokeh import streamlit_bokeh
 import numpy as np
-np.bool8 = bool  # fix for bokeh 2.4.3
 from scipy.ndimage import map_coordinates
 import math, random
 import gc
@@ -327,13 +327,13 @@ def main():
 
                 from bokeh.layouts import column
                 fig_image = column([fig3, fig1, fig2, fig4], sizing_mode='scale_width')
-                st.bokeh_chart(fig_image, use_container_width=True)
+                streamlit_bokeh(fig_image, use_container_width=True)
                 del fig_image, image, image2
         else:
             with container_image:
                 tooltips = [("x", "$x"), ('y', '$y'), ('val', '@image')]
                 fig_image = generate_bokeh_figure(image, 1, 1, title=f"Original", title_location="below", plot_width=None, plot_height=None, x_axis_label=None, y_axis_label=None, tooltips=tooltips, show_axis=False, show_toolbar=False, crosshair_color="white", aspect_ratio=w/h)
-                st.bokeh_chart(fig_image, use_container_width=True)
+                streamlit_bokeh(fig_image, use_container_width=True)
                 del fig_image, image
 
         rad_plot = st.empty()
@@ -371,7 +371,7 @@ def main():
         fig_radprofile.add_layout(rmax_span)
         fig_radprofile.yaxis.visible = False
         with rad_plot:
-            st.bokeh_chart(fig_radprofile, use_container_width=True)
+            streamlit_bokeh(fig_radprofile, use_container_width=True)
             del fig_radprofile
         
         with st.expander(label="Server info", expanded=False):
@@ -493,7 +493,7 @@ def main():
                     fig_cylproj.quad(left=-180, right=ang_max, bottom=z_min, top=z_max, line_color=None, fill_color='yellow', fill_alpha=0.5)
 
             st.text("") # workaround for a layout bug in streamlit 
-            st.bokeh_chart(fig_cylproj, use_container_width=True)
+            streamlit_bokeh(fig_cylproj, use_container_width=True)
             del fig_cylproj
             del cylproj
 
@@ -510,7 +510,7 @@ def main():
                     y = peaks[:npeaks, 1]
                     fig_acf.ellipse(x, y, width=peak_width, height=peak_height, line_width=1, line_color='yellow', fill_alpha=0)
 
-            st.bokeh_chart(fig_acf, use_container_width=True)
+            streamlit_bokeh(fig_acf, use_container_width=True)
             del fig_acf
 
         if peaks is None:
@@ -619,7 +619,7 @@ def main():
         fig_indexing.js_on_event(MouseEnter, title_js)
 
         st.text("") # workaround for a layout bug in streamlit 
-        st.bokeh_chart(fig_indexing, use_container_width=True)
+        streamlit_bokeh(fig_indexing, use_container_width=True)
         del fig_indexing
         del acf
 
