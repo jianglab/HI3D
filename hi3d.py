@@ -1314,7 +1314,7 @@ def extract_emd_id(text):
         emd_id = None
     return emd_id
 
-st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def get_emdb_ids():
     try:
         import_with_auto_install(["pandas"])
