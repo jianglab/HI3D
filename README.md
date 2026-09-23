@@ -1,3 +1,6 @@
+# This project is archived. Further development is in [Helicon](https://github.com/jianglab/helicon)
+___
+
 # HI3D: <em>H</em>elical <em>I</em>ndexing using the cylindrical projection of a <em>3D</em> map
 
 **Publication**: Sun, C., Gonzalez, B., & Jiang, W. (2022). [Helical Indexing in Real Space](https://doi.org/10.1038/s41598-022-11382-7). Scientific Reports, 12(1), 1–11. 
